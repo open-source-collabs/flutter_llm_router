@@ -7,7 +7,8 @@ class ApiKeysDialog extends StatefulWidget {
 
   final ChatRouterViewModel viewModel;
 
-  static Future<void> show(BuildContext context, ChatRouterViewModel viewModel) {
+  static Future<void> show(
+      BuildContext context, ChatRouterViewModel viewModel) {
     return showDialog<void>(
       context: context,
       builder: (context) => ApiKeysDialog(viewModel: viewModel),
@@ -28,7 +29,8 @@ class _ApiKeysDialogState extends State<ApiKeysDialog> {
     super.initState();
     _openAiController = TextEditingController(text: widget.viewModel.openAiKey);
     _geminiController = TextEditingController(text: widget.viewModel.geminiKey);
-    _anthropicController = TextEditingController(text: widget.viewModel.anthropicKey);
+    _anthropicController =
+        TextEditingController(text: widget.viewModel.anthropicKey);
   }
 
   @override
@@ -96,4 +98,3 @@ class _ApiKeysDialogState extends State<ApiKeysDialog> {
     );
   }
 }
-

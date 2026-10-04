@@ -30,7 +30,8 @@ class AttemptLogsSheet extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             if (logs.isEmpty)
-              const Text('No attempts recorded yet. Send a prompt to test failover.')
+              const Text(
+                  'No attempts recorded yet. Send a prompt to test failover.')
             else
               for (final log in logs) _AttemptTile(log: log),
           ],
@@ -55,7 +56,8 @@ class _AttemptTile extends StatelessWidget {
         color: log.isSuccess ? Colors.green : Colors.red,
       ),
       title: Text(log.model),
-      subtitle: Text('${log.providerName.toUpperCase()} · ${log.latencyMs} ms · $status'),
+      subtitle: Text(
+          '${log.providerName.toUpperCase()} · ${log.latencyMs} ms · $status'),
     );
   }
 
@@ -70,4 +72,3 @@ class _AttemptTile extends StatelessWidget {
     return 'Failed';
   }
 }
-
