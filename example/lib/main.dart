@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/adapters/base_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/openrouter_adapter.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
 
 void main() {
   runApp(const DemoApp());
@@ -34,10 +30,20 @@ class DemoPage extends StatefulWidget {
 }
 
 class _DemoPageState extends State<DemoPage> {
-  final TextEditingController _openRouterKey = TextEditingController();
+  final TextEditingController _openAiKey = TextEditingController(
+    text: const String.fromEnvironment('OPENAI_API_KEY'),
+  );
+  final TextEditingController _geminiKey = TextEditingController(
+    text: const String.fromEnvironment('GEMINI_API_KEY'),
+  );
+  final TextEditingController _anthropicKey = TextEditingController(
+    text: const String.fromEnvironment('ANTHROPIC_API_KEY'),
+  );
   final CostTracker _costTracker = CostTracker();
 
-  late final _OpenRouterHops _hops;
+  late final _FailableAdapter _openAiAdapter;
+  late final _FailableAdapter _geminiAdapter;
+  late final _FailableAdapter _anthropicAdapter;
   late final RouterLlmProvider _router;
 
   bool _failOpenAi = false;
@@ -46,39 +52,51 @@ class _DemoPageState extends State<DemoPage> {
   @override
   void initState() {
     super.initState();
-    _hops = _OpenRouterHops(
-      delegate: OpenRouterAdapter(),
-      apiKey: _openRouterKey,
-      failOpenAi: () => _failOpenAi,
-      failGemini: () => _failGemini,
+    _openAiAdapter = _FailableAdapter(
+      delegate: OpenAiAdapter(),
+      apiKey: _openAiKey,
+      shouldFail: () => _failOpenAi,
     );
+    _geminiAdapter = _FailableAdapter(
+      delegate: GeminiAdapter(),
+      apiKey: _geminiKey,
+      shouldFail: () => _failGemini,
+    );
+    _anthropicAdapter = _FailableAdapter(
+      delegate: AnthropicAdapter(),
+      apiKey: _anthropicKey,
+      shouldFail: () => false,
+    );
+
     _router = RouterLlmProvider(
       providers: const [
         ProviderConfig(
-          name: 'openrouter',
+          name: 'openai',
           apiKey: '',
-          model: 'openai/gpt-4o-mini',
+          model: 'gpt-4o-mini',
           pricePerInputToken: 0.00000015,
           pricePerOutputToken: 0.0000006,
         ),
         ProviderConfig(
-          name: 'openrouter',
+          name: 'gemini',
           apiKey: '',
-          model: 'google/gemini-2.5-flash',
-          pricePerInputToken: 0.0000003,
-          pricePerOutputToken: 0.0000025,
+          model: 'gemini-2.0-flash',
+          pricePerInputToken: 0.0000001,
+          pricePerOutputToken: 0.0000004,
         ),
         ProviderConfig(
-          name: 'openrouter',
+          name: 'anthropic',
           apiKey: '',
-          model: 'anthropic/claude-haiku-4.5',
-          pricePerInputToken: 0.000001,
-          pricePerOutputToken: 0.000005,
+          model: 'claude-3-5-haiku-20241022',
+          pricePerInputToken: 0.0000008,
+          pricePerOutputToken: 0.000004,
         ),
       ],
       costTracker: _costTracker,
       customAdapters: <String, BaseLlmAdapter>{
-        'openrouter': _hops,
+        'openai': _openAiAdapter,
+        'gemini': _geminiAdapter,
+        'anthropic': _anthropicAdapter,
       },
     );
   }
@@ -86,9 +104,13 @@ class _DemoPageState extends State<DemoPage> {
   @override
   void dispose() {
     _router.dispose();
-    _hops.close();
+    _openAiAdapter.close();
+    _geminiAdapter.close();
+    _anthropicAdapter.close();
     _costTracker.dispose();
-    _openRouterKey.dispose();
+    _openAiKey.dispose();
+    _geminiKey.dispose();
+    _anthropicKey.dispose();
     super.dispose();
   }
 
@@ -126,7 +148,7 @@ class _DemoPageState extends State<DemoPage> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text('Simulate primary outage (HTTP 429)'),
+                      child: Text('Simulate OpenAI outage (HTTP 429)'),
                     ),
                     Switch(
                       value: _failOpenAi,
@@ -137,7 +159,7 @@ class _DemoPageState extends State<DemoPage> {
                 Row(
                   children: [
                     const Expanded(
-                      child: Text('Also fail Gemini'),
+                      child: Text('Also simulate Gemini outage'),
                     ),
                     Switch(
                       value: _failGemini,
@@ -152,11 +174,12 @@ class _DemoPageState extends State<DemoPage> {
       ),
       body: LlmChatView(
         provider: _router,
-        welcomeMessage:
-            'Provider name is openrouter. Models: openai/gpt-4o-mini, then '
-            'google/gemini-2.5-flash, then anthropic/claude-haiku-4.5. '
-            'Turn on the 429 switch to land on Gemini. Turn on both switches '
-            'to land on Anthropic.',
+        welcomeMessage: 'Separate Direct Providers:\n'
+            '1. OpenAI (gpt-4o-mini)\n'
+            '2. Google Gemini (gemini-2.0-flash)\n'
+            '3. Anthropic (claude-3-5-haiku)\n\n'
+            'Tap the key icon at top right to enter your API keys. '
+            'Use the outage switches above to test live failover!',
         suggestions: const ['Hello', 'Count to three'],
       ),
     );
@@ -167,14 +190,38 @@ class _DemoPageState extends State<DemoPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('OpenRouter API key'),
-          content: TextField(
-            controller: _openRouterKey,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'OpenRouter API key',
-              helperText:
-                  'Sent as Bearer auth to openrouter.ai for every hop',
+          title: const Text('Direct Provider API Keys'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _openAiKey,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'OpenAI API key (sk-...)',
+                    helperText: 'Direct to api.openai.com',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _geminiKey,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Gemini API key (AIza...)',
+                    helperText: 'Direct to generativelanguage.googleapis.com',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _anthropicKey,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Anthropic API key (sk-ant-...)',
+                    helperText: 'Direct to api.anthropic.com',
+                  ),
+                ),
+              ],
             ),
           ),
           actions: [
@@ -249,30 +296,26 @@ String _failureStatus(AttemptLog log) {
   return 'failed';
 }
 
-class _OpenRouterHops extends BaseLlmAdapter {
-  _OpenRouterHops({
+class _FailableAdapter extends BaseLlmAdapter {
+  _FailableAdapter({
     required this.delegate,
     required this.apiKey,
-    required this.failOpenAi,
-    required this.failGemini,
+    required this.shouldFail,
   });
 
-  final OpenRouterAdapter delegate;
+  final BaseLlmAdapter delegate;
   final TextEditingController apiKey;
-  final bool Function() failOpenAi;
-  final bool Function() failGemini;
+  final bool Function() shouldFail;
 
   @override
   Stream<AdapterChunk> streamCompletion({
     required ProviderConfig config,
     required List<ChatTurn> messages,
   }) {
-    final model = config.model;
-    if ((failOpenAi() && model.startsWith('openai/')) ||
-        (failGemini() && model.startsWith('google/'))) {
+    if (shouldFail()) {
       return Stream<AdapterChunk>.error(
         RetryableLlmException(
-          'Simulated HTTP 429 for $model',
+          'Simulated HTTP 429 for ${config.name} (${config.model})',
           statusCode: 429,
         ),
       );

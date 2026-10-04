@@ -183,10 +183,8 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
         _replaceLogs(logs);
         costTracker.recordUsage(
           config: config,
-          inputTokens:
-              reportedInput ?? _estimateTokens(_turnText(messages)),
-          outputTokens:
-              reportedOutput ?? _estimateTokens(output.toString()),
+          inputTokens: reportedInput ?? _estimateTokens(_turnText(messages)),
+          outputTokens: reportedOutput ?? _estimateTokens(output.toString()),
         );
         return;
       } on RetryableLlmException catch (error) {
@@ -278,8 +276,8 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     final turns = <ChatTurn>[];
     for (final message in _history) {
       final text = message.text?.trim() ?? '';
-      final notes = message.attachments
-          .map((attachment) => attachment.toString());
+      final notes =
+          message.attachments.map((attachment) => attachment.toString());
       final body = <String>[
         if (text.isNotEmpty) text,
         if (notes.isNotEmpty) notes.join('\n'),

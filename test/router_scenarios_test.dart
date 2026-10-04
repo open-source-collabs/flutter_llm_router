@@ -2,9 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/adapters/base_adapter.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -447,8 +444,7 @@ void main() {
       router.addListener(() => notifications++);
 
       final text = await router
-          .generateStream('look', attachments: <Attachment>[attachment])
-          .join();
+          .generateStream('look', attachments: <Attachment>[attachment]).join();
 
       expect(text, 'Hello');
       expect(seen.single, contains('look'));

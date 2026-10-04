@@ -1,6 +1,4 @@
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Message mapping, usage parsing, and exception contracts.

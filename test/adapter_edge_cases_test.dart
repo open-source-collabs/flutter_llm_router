@@ -1,12 +1,6 @@
 import 'dart:convert';
 
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/adapters/anthropic_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/gemini_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/openai_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/openrouter_adapter.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -85,7 +79,8 @@ void main() {
   });
 
   group('SSE framing', () {
-    test('skips comments, blanks, event names, and the DONE sentinel', () async {
+    test('skips comments, blanks, event names, and the DONE sentinel',
+        () async {
       const body = '''
 : keep-alive
 
@@ -149,7 +144,8 @@ data:{"choices":[{"delta":{"content":"Yo"}}]}
       expect(text, <String>['Hi']);
     });
 
-    test('a socket drop after text keeps the status and the fragment', () async {
+    test('a socket drop after text keeps the status and the fragment',
+        () async {
       final client = MockClient.streaming((request, bodyStream) async {
         await bodyStream.drain<void>();
         return http.StreamedResponse(_textThenReset(), 200);
@@ -229,18 +225,16 @@ data: [DONE]
       });
       addTearDown(client.close);
 
-      await OpenAiAdapter(client: client)
-          .streamCompletion(
-            config: _config(
-              baseUrl: 'https://example.test/openai/v1/',
-              maxOutputTokens: 128,
-            ),
-            messages: const <ChatTurn>[
-              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-              ChatTurn(role: ChatTurnRole.assistant, text: 'Hello'),
-            ],
-          )
-          .drain<void>();
+      await OpenAiAdapter(client: client).streamCompletion(
+        config: _config(
+          baseUrl: 'https://example.test/openai/v1/',
+          maxOutputTokens: 128,
+        ),
+        messages: const <ChatTurn>[
+          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+          ChatTurn(role: ChatTurnRole.assistant, text: 'Hello'),
+        ],
+      ).drain<void>();
     });
   });
 
@@ -268,17 +262,15 @@ data: {"type":"message_start","message":{"id":"msg_1"}}
       });
       addTearDown(client.close);
 
-      final chunks = await AnthropicAdapter(client: client)
-          .streamCompletion(
-            config: _config(
-              model: 'claude-3-5-haiku-latest',
-              baseUrl: 'https://example.test/anthropic/v1',
-            ),
-            messages: const <ChatTurn>[
-              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-            ],
-          )
-          .toList();
+      final chunks = await AnthropicAdapter(client: client).streamCompletion(
+        config: _config(
+          model: 'claude-3-5-haiku-latest',
+          baseUrl: 'https://example.test/anthropic/v1',
+        ),
+        messages: const <ChatTurn>[
+          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+        ],
+      ).toList();
 
       expect(
         chunks.whereType<AdapterText>().map((chunk) => chunk.text).toList(),
@@ -313,18 +305,16 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
       });
       addTearDown(client.close);
 
-      final chunks = await GeminiAdapter(client: client)
-          .streamCompletion(
-            config: _config(
-              model: 'gemini 2.0',
-              baseUrl: 'https://example.test/gemini',
-              maxOutputTokens: 64,
-            ),
-            messages: const <ChatTurn>[
-              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-            ],
-          )
-          .toList();
+      final chunks = await GeminiAdapter(client: client).streamCompletion(
+        config: _config(
+          model: 'gemini 2.0',
+          baseUrl: 'https://example.test/gemini',
+          maxOutputTokens: 64,
+        ),
+        messages: const <ChatTurn>[
+          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+        ],
+      ).toList();
 
       expect(
         chunks.whereType<AdapterText>().map((chunk) => chunk.text).join(),
@@ -336,7 +326,8 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
   });
 
   group('OpenRouter payload edges', () {
-    test('keeps an explicit baseUrl instead of the OpenRouter default', () async {
+    test('keeps an explicit baseUrl instead of the OpenRouter default',
+        () async {
       final client = MockClient.streaming((request, bodyStream) async {
         await bodyStream.drain<void>();
         expect(
@@ -347,17 +338,15 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
       });
       addTearDown(client.close);
 
-      await OpenRouterAdapter(client: client)
-          .streamCompletion(
-            config: _config(
-              model: 'openai/gpt-4o-mini',
-              baseUrl: 'https://proxy.example/api/v1/',
-            ),
-            messages: const <ChatTurn>[
-              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-            ],
-          )
-          .drain<void>();
+      await OpenRouterAdapter(client: client).streamCompletion(
+        config: _config(
+          model: 'openai/gpt-4o-mini',
+          baseUrl: 'https://proxy.example/api/v1/',
+        ),
+        messages: const <ChatTurn>[
+          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+        ],
+      ).drain<void>();
     });
   });
 }
@@ -412,7 +401,8 @@ Future<void> _expectStatus<T extends LlmRouterException>(
   );
 }
 
-Future<void> _collectText(Stream<AdapterChunk> chunks, List<String> into) async {
+Future<void> _collectText(
+    Stream<AdapterChunk> chunks, List<String> into) async {
   await for (final chunk in chunks) {
     if (chunk is AdapterText) into.add(chunk.text);
   }

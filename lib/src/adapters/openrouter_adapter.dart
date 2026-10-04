@@ -23,9 +23,8 @@ class OpenRouterAdapter extends OpenAiAdapter {
     required ProviderConfig config,
     required List<ChatTurn> messages,
   }) {
-    final resolved = config.baseUrl == null
-        ? config.copyWith(baseUrl: defaultBase)
-        : config;
+    final resolved =
+        config.baseUrl == null ? config.copyWith(baseUrl: defaultBase) : config;
     return super.streamCompletion(config: resolved, messages: messages);
   }
 }

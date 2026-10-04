@@ -1,8 +1,5 @@
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/adapters/base_adapter.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -123,7 +120,8 @@ void main() {
           }),
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
-            return Stream<AdapterChunk>.value(const AdapterText('should not run'));
+            return Stream<AdapterChunk>.value(
+                const AdapterText('should not run'));
           }),
         },
       );
@@ -166,7 +164,8 @@ void main() {
           }),
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
-            return Stream<AdapterChunk>.value(const AdapterText('should not run'));
+            return Stream<AdapterChunk>.value(
+                const AdapterText('should not run'));
           }),
         },
       );
@@ -204,7 +203,8 @@ void main() {
           }),
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
-            return Stream<AdapterChunk>.value(const AdapterText('should not run'));
+            return Stream<AdapterChunk>.value(
+                const AdapterText('should not run'));
           }),
         },
       );
@@ -285,7 +285,8 @@ void main() {
       expect(tracker.totalCost, closeTo(0.000025, 1e-12));
     });
 
-    test('sendMessageStream sends earlier turns as separate messages', () async {
+    test('sendMessageStream sends earlier turns as separate messages',
+        () async {
       final client = MockClient((_) async => http.Response('', 200));
       addTearDown(client.close);
       final seen = <List<ChatTurn>>[];

@@ -2,12 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_llm_router/flutter_llm_router.dart';
-import 'package:flutter_llm_router/src/models/adapter_chunk.dart';
-import 'package:flutter_llm_router/src/models/chat_turn.dart';
-import 'package:flutter_llm_router/src/adapters/anthropic_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/gemini_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/openai_adapter.dart';
-import 'package:flutter_llm_router/src/adapters/openrouter_adapter.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -168,8 +162,10 @@ void main() {
           .toList();
       final usage = chunks.whereType<AdapterUsage>().toList();
 
-      expect(usage.map((event) => event.inputTokens).toList(), <int?>[25, null]);
-      expect(usage.map((event) => event.outputTokens).toList(), <int?>[null, 4]);
+      expect(
+          usage.map((event) => event.inputTokens).toList(), <int?>[25, null]);
+      expect(
+          usage.map((event) => event.outputTokens).toList(), <int?>[null, 4]);
     });
   });
 

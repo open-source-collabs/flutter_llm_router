@@ -91,7 +91,8 @@ void main() {
 
   test('a zero-cost update does not notify, but token counters still move', () {
     final observed = <double>[];
-    tracker.totalCostNotifier.addListener(() => observed.add(tracker.totalCost));
+    tracker.totalCostNotifier
+        .addListener(() => observed.add(tracker.totalCost));
 
     const free = ProviderConfig(
       name: 'openai',
@@ -113,7 +114,8 @@ void main() {
 
   test('reset notifies only when the total actually changes', () {
     final observed = <double>[];
-    tracker.totalCostNotifier.addListener(() => observed.add(tracker.totalCost));
+    tracker.totalCostNotifier
+        .addListener(() => observed.add(tracker.totalCost));
 
     tracker.reset();
     expect(observed, isEmpty);
