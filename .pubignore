@@ -1,0 +1,35 @@
+# GitHub workflows and repository metadata
+.github/
+
+# Editor and OS development assets
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.DS_Store
+
+# Dart and Flutter tooling
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+
+# Example platform shells and local build output
+example/android/
+example/ios/
+example/linux/
+example/macos/
+example/windows/
+example/web/
+example/.dart_tool/
+example/build/
+example/pubspec.lock
+
+# Test mocks and fixtures
+test/mocks/
+test/fixtures/
