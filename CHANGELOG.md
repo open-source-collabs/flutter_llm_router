@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-10-04
+
+- Added direct multi-provider configurations for OpenAI, Google Gemini, and Anthropic Claude.
+- Refactored example app with MVVM state management (`ChatRouterViewModel`).
+- Added compile-time `--dart-define` key configuration support.
+- Exported adapters and model types in public library exports.
+- Updated repository and issue tracker URLs to open-source-collabs.
+
 ## [1.0.0] - 2026-10-01
 
 First release of the local package. It is not published to pub.dev.
