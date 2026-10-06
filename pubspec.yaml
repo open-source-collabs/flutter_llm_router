@@ -1,26 +1,23 @@
 name: flutter_llm_router
 description: "A resilient multi-provider LLM router for Flutter AI Toolkit featuring transparent failover, token cost tracking, and attempt logging."
-version: 1.0.1
+version: 1.0.2
 repository: https://github.com/open-source-collabs/flutter_llm_router
 issue_tracker: https://github.com/open-source-collabs/flutter_llm_router/issues
 
 environment:
-  sdk: ^3.5.0
-  flutter: ">=3.24.0"
+  sdk: ^3.7.0
+  flutter: ">=3.27.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  flutter_ai_toolkit: ^0.5.0
-  # 0.5.0 calls TaskType. firebase_vertexai 1.5+ dropped that type, so the
-  # solver must stay on a release that still exports it.
-  firebase_vertexai: ">=1.0.1 <1.5.0"
+  flutter_ai_toolkit: ^1.0.0
   http: ^1.2.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 topics:
   - ai

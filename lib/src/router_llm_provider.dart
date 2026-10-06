@@ -116,7 +116,8 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     }
   }
 
-  @override
+  /// Embeddings are not supported by [RouterLlmProvider]; always throws
+  /// [UnimplementedError].
   Future<List<double>> getDocumentEmbedding(String document) {
     throw UnimplementedError(
       'RouterLlmProvider.getDocumentEmbedding is not implemented '
@@ -124,7 +125,8 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     );
   }
 
-  @override
+  /// Embeddings are not supported by [RouterLlmProvider]; always throws
+  /// [UnimplementedError].
   Future<List<double>> getQueryEmbedding(String query) {
     throw UnimplementedError(
       'RouterLlmProvider.getQueryEmbedding is not implemented '

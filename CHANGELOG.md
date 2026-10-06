@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-10-06
+
+- Upgraded `flutter_ai_toolkit` constraint to `^1.0.0` and `flutter_lints` to `^6.0.0`.
+- Removed discontinued `firebase_vertexai` dependency.
+- Updated `RouterLlmProvider` embedding methods and documentation for `flutter_ai_toolkit 1.0.0`.
+
 ## [1.0.1] - 2026-10-04
 
 - Added direct multi-provider configurations for OpenAI, Google Gemini, and Anthropic Claude.
