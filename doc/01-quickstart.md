@@ -1,24 +1,23 @@
 # Quickstart
 
-This package is not on pub.dev. Depend on it with a path until you have tested it against real providers.
+Get started with `flutter_llm_router` in your Flutter application.
 
 ## 1. Add the dependencies
 
-From an app next to the `flutter_llm_router` checkout:
+Add `flutter_llm_router` and `flutter_ai_toolkit` to your Flutter app:
+
+```sh
+flutter pub add flutter_llm_router flutter_ai_toolkit
+```
+
+Or add them directly to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
   flutter:
     sdk: flutter
   flutter_ai_toolkit: ^1.0.0
-  flutter_llm_router:
-    path: ../flutter_llm_router
-```
-
-Then run:
-
-```sh
-flutter pub get
+  flutter_llm_router: ^1.0.3
 ```
 
 Requires Dart `^3.7.0` and Flutter `>=3.27.0`. Fully supported on Windows, macOS, Linux, Android, iOS, and Web.
