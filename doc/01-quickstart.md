@@ -10,7 +10,7 @@ From an app next to the `flutter_llm_router` checkout:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_ai_toolkit: ^0.5.0
+  flutter_ai_toolkit: ^1.0.0
   flutter_llm_router:
     path: ../flutter_llm_router
 ```
@@ -21,7 +21,7 @@ Then run:
 flutter pub get
 ```
 
-Requires Dart `^3.5.0` and Flutter `>=3.24.0`.
+Requires Dart `^3.7.0` and Flutter `>=3.27.0`. Fully supported on Windows, macOS, Linux, Android, iOS, and Web.
 
 ## 2. Create the router
 
@@ -82,7 +82,7 @@ void dispose() {
 
 ```sh
 cd example
-flutter run
+flutter run -d windows  # or -d chrome, or connected device
 ```
 
 The example sends one OpenRouter key to `https://openrouter.ai/api/v1` and walks `openai/gpt-4o-mini`, then `google/gemini-2.5-flash`, then `anthropic/claude-haiku-4.5`. Enter that key from the key icon. Send a prompt with the 429 switch off, then with it on, then with both outage switches on. The spend label and the attempt sheet are the checks. Direct vendor keys, as in the snippet above, are the production setup.

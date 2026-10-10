@@ -10,6 +10,27 @@ Enter the OpenRouter key from the key icon. Leave both switches off to stay on t
 
 Direct OpenAI, Gemini, and Anthropic credentials stay on the package adapters. This example does not call those vendor APIs.
 
+## Running the Example
+
+### Windows Desktop
+```sh
+flutter run -d windows
+```
+> Note: Building the Windows desktop runner requires Visual Studio with the "Desktop development with C++" workload.
+
+### Linux Desktop
+```sh
+flutter run -d linux
+```
+> Note: Building for Linux desktop requires standard GTK build dependencies:
+> `sudo apt-get install clang cmake ninja-build pkg-config libgtk-3-dev`
+
+### Chrome / Web
+```sh
+flutter run -d chrome
+```
+
+### Connected Mobile Device or Emulator
 ```sh
 flutter run
 ```

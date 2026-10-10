@@ -1,6 +1,6 @@
 name: flutter_llm_router
 description: "A resilient multi-provider LLM router for Flutter AI Toolkit featuring transparent failover, token cost tracking, and attempt logging."
-version: 1.0.2
+version: 1.0.3
 repository: https://github.com/open-source-collabs/flutter_llm_router
 issue_tracker: https://github.com/open-source-collabs/flutter_llm_router/issues
 
@@ -8,11 +8,19 @@ environment:
   sdk: ^3.7.0
   flutter: ">=3.27.0"
 
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  web:
+  windows:
+
 dependencies:
   flutter:
     sdk: flutter
   flutter_ai_toolkit: ^1.0.0
-  http: ^1.2.0
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

@@ -5,6 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-10-10
+
+- Added explicit Windows and Linux (full cross-platform) support declarations in `pubspec.yaml`.
+- Added native Windows (`example/windows/`) and Linux (`example/linux/`) desktop runner scaffolding to enable running the example app natively on both desktop platforms.
+- Updated `http` dependency constraint to `^1.6.0`.
+- Updated documentation with Windows and Linux desktop setup instructions and synchronized dependency version requirements.
+
 ## [1.0.2] - 2026-10-06
 
 - Upgraded `flutter_ai_toolkit` constraint to `^1.0.0` and `flutter_lints` to `^6.0.0`.

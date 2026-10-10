@@ -1,10 +1,11 @@
 # flutter_llm_router
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Dart](https://img.shields.io/badge/Dart-%5E3.5.0-0175C2?logo=dart&logoColor=white)
-![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.24.0-02569B?logo=flutter&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-%5E3.7.0-0175C2?logo=dart&logoColor=white)
+![Flutter](https://img.shields.io/badge/Flutter-%3E%3D3.27.0-02569B?logo=flutter&logoColor=white)
+[![Platforms](https://img.shields.io/badge/platforms-windows%20%7C%20android%20%7C%20ios%20%7C%20web%20%7C%20macos%20%7C%20linux-blue.svg)](pubspec.yaml)
 
-A resilient multi-provider LLM router for Flutter AI Toolkit. `RouterLlmProvider` implements `LlmProvider`, so it drops into `LlmChatView` and adds failover, live cost tracking, and attempt logs.
+A resilient multi-provider LLM router for Flutter AI Toolkit. `RouterLlmProvider` implements `LlmProvider`, so it drops into `LlmChatView` and adds failover, live cost tracking, and attempt logs across Windows, macOS, Linux, Android, iOS, and Web.
 
 This package is **not published**. Use the path dependency and the example app below to test it against real providers before any upload.
 
@@ -31,7 +32,7 @@ From an app that sits next to this repo:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_ai_toolkit: ^0.5.0
+  flutter_ai_toolkit: ^1.0.0
   flutter_llm_router:
     path: ../flutter_llm_router
 ```
@@ -73,7 +74,7 @@ LlmChatView(
 )
 ```
 
-The runnable harness is `example/`. It adds a 429 switch, key entry, the spend label, and the attempt sheet.
+The runnable harness is `example/`, supporting Windows desktop (`flutter run -d windows`), Web, Android, and iOS. It adds a 429 switch, key entry, the spend label, and the attempt sheet.
 
 ## Live cost tracking
 
