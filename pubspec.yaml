@@ -27,6 +27,14 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+screenshots:
+  - description: 'Failover: when one provider returns HTTP 429, the router moves on to the next and the chat keeps streaming.'
+    path: screenshots/failover.png
+  - description: 'Live cost tracking: per-token prices on each provider feed a listenable total you can bind to a label.'
+    path: screenshots/cost-tracking.png
+  - description: 'Quickstart: configure providers once and pass the router to LlmChatView.'
+    path: screenshots/quickstart.png
+
 topics:
   - ai
   - llm
