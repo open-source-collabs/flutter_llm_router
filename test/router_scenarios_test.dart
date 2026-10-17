@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
@@ -668,6 +669,178 @@ void main() {
       expect(adapter.closeCalls, 0);
     });
   });
+
+  group('connectivity', () {
+    Stream<AdapterChunk> connectFailure(ProviderConfig config, _) {
+      return Stream<AdapterChunk>.error(
+        RetryableLlmException(
+          'Connection to ${config.name} failed',
+          cause: http.ClientException('Failed host lookup'),
+        ),
+      );
+    }
+
+    test('stops the chain when the device is offline', () async {
+      final checker = _FakeConnectivity(online: false);
+      var betaCalls = 0;
+      final router = _router(
+        providers: [_config('alpha'), _config('beta')],
+        connectivity: checker,
+        adapters: {
+          'alpha': connectFailure,
+          'beta': (config, messages) {
+            betaCalls++;
+            return Stream<AdapterChunk>.value(const AdapterText('pong'));
+          },
+        },
+      );
+
+      final error = await router
+          .generateStream('ping')
+          .join()
+          .then<Object?>((_) => null, onError: (Object error) => error);
+
+      expect(error, isA<NoInternetConnectionException>());
+      final offline = error! as NoInternetConnectionException;
+      expect(offline.cause, isA<RetryableLlmException>());
+      expect(offline.attempts.map((log) => log.providerName), ['alpha']);
+      expect(
+        offline.toString(),
+        'No internet connection. Please check your network and try again.',
+      );
+      expect(router.lastAttemptLogs, hasLength(1));
+      expect(betaCalls, 0);
+      expect(checker.calls, 1);
+    });
+
+    test('fails over silently when the device is online', () async {
+      final checker = _FakeConnectivity(online: true);
+      final router = _router(
+        providers: [_config('alpha'), _config('beta')],
+        connectivity: checker,
+        adapters: {
+          'alpha': connectFailure,
+          'beta': (config, messages) =>
+              Stream<AdapterChunk>.value(const AdapterText('pong')),
+        },
+      );
+
+      expect(await router.generateStream('ping').join(), 'pong');
+      expect(checker.calls, 1);
+      expect(
+        router.lastAttemptLogs.map((log) => log.isSuccess),
+        [false, true],
+      );
+    });
+
+    test('treats a timeout as a connection failure', () async {
+      final checker = _FakeConnectivity(online: false);
+      final router = _router(
+        providers: [_config('alpha'), _config('beta')],
+        connectivity: checker,
+        adapters: {
+          'alpha': (config, messages) => Stream<AdapterChunk>.error(
+                RetryableLlmException(
+                  'timed out',
+                  cause: TimeoutException('no headers'),
+                ),
+              ),
+          'beta': (config, messages) =>
+              Stream<AdapterChunk>.value(const AdapterText('pong')),
+        },
+      );
+
+      await expectLater(
+        router.generateStream('ping').join(),
+        throwsA(isA<NoInternetConnectionException>()),
+      );
+      expect(checker.calls, 1);
+    });
+
+    test('does not probe for HTTP status failures', () async {
+      final checker = _FakeConnectivity(online: false);
+      final router = _router(
+        providers: [_config('alpha'), _config('beta'), _config('gamma')],
+        connectivity: checker,
+        adapters: {
+          'alpha': (config, messages) => Stream<AdapterChunk>.error(
+                const RetryableLlmException('rate limited', statusCode: 429),
+              ),
+          'beta': (config, messages) => Stream<AdapterChunk>.error(
+                const RetryableLlmException('unavailable', statusCode: 503),
+              ),
+          'gamma': (config, messages) =>
+              Stream<AdapterChunk>.value(const AdapterText('pong')),
+        },
+      );
+
+      expect(await router.generateStream('ping').join(), 'pong');
+      expect(checker.calls, 0);
+    });
+
+    test('probes at most once per request', () async {
+      final checker = _FakeConnectivity(online: true);
+      final router = _router(
+        providers: [_config('alpha'), _config('beta'), _config('gamma')],
+        connectivity: checker,
+        adapters: {
+          'alpha': connectFailure,
+          'beta': connectFailure,
+          'gamma': connectFailure,
+        },
+      );
+
+      await expectLater(
+        router.generateStream('ping').join(),
+        throwsA(isA<AllProvidersFailedException>()),
+      );
+      expect(checker.calls, 1);
+
+      await expectLater(
+        router.generateStream('ping again').join(),
+        throwsA(isA<AllProvidersFailedException>()),
+      );
+      expect(checker.calls, 2);
+    });
+
+    test('does not probe after text was emitted', () async {
+      final checker = _FakeConnectivity(online: false);
+      final router = _router(
+        providers: [_config('alpha'), _config('beta')],
+        connectivity: checker,
+        adapters: {
+          'alpha': (config, messages) async* {
+            yield const AdapterText('par');
+            throw RetryableLlmException(
+              'dropped',
+              cause: http.ClientException('socket closed'),
+            );
+          },
+          'beta': (config, messages) =>
+              Stream<AdapterChunk>.value(const AdapterText('pong')),
+        },
+      );
+
+      await expectLater(
+        router.generateStream('ping').join(),
+        throwsA(isA<RetryableLlmException>()),
+      );
+      expect(checker.calls, 0);
+    });
+  });
+}
+
+class _FakeConnectivity implements ConnectivityChecker {
+  _FakeConnectivity({required this.online});
+
+  final bool online;
+  int calls = 0;
+
+  @override
+  Future<bool> hasInternet() async {
+    calls++;
+    return online;
+  }
 }
 
 ProviderConfig _config(
@@ -694,6 +867,7 @@ RouterLlmProvider _router({
   required List<ProviderConfig> providers,
   Map<String, _Handler> adapters = const <String, _Handler>{},
   Iterable<ChatMessage>? history,
+  ConnectivityChecker? connectivity,
 }) {
   final clients = <http.Client>[];
   final custom = <String, BaseLlmAdapter>{};
@@ -706,6 +880,7 @@ RouterLlmProvider _router({
     providers: providers,
     history: history,
     customAdapters: custom,
+    connectivityChecker: connectivity ?? _FakeConnectivity(online: true),
   );
   addTearDown(() {
     router.dispose();

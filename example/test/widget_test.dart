@@ -10,7 +10,8 @@ void main() {
     await tester.pump();
 
     expect(find.text(r'$0.00000000'), findsOneWidget);
-    expect(find.text('Simulate primary outage (HTTP 429)'), findsOneWidget);
+    expect(find.text('Simulate OpenAI outage (HTTP 429)'), findsOneWidget);
+    expect(find.text('Simulate OpenAI network failure'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.receipt_long));
     await tester.pumpAndSettle();

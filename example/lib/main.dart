@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
 import 'package:flutter_llm_router/flutter_llm_router.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const DemoApp());
@@ -47,6 +48,7 @@ class _DemoPageState extends State<DemoPage> {
   late final RouterLlmProvider _router;
 
   bool _failOpenAi = false;
+  bool _dropOpenAi = false;
   bool _failGemini = false;
 
   @override
@@ -55,17 +57,21 @@ class _DemoPageState extends State<DemoPage> {
     _openAiAdapter = _FailableAdapter(
       delegate: OpenAiAdapter(),
       apiKey: _openAiKey,
-      shouldFail: () => _failOpenAi,
+      simulate: () => _dropOpenAi
+          ? _SimulatedFailure.network
+          : _failOpenAi
+              ? _SimulatedFailure.rateLimit
+              : null,
     );
     _geminiAdapter = _FailableAdapter(
       delegate: GeminiAdapter(),
       apiKey: _geminiKey,
-      shouldFail: () => _failGemini,
+      simulate: () => _failGemini ? _SimulatedFailure.rateLimit : null,
     );
     _anthropicAdapter = _FailableAdapter(
       delegate: AnthropicAdapter(),
       apiKey: _anthropicKey,
-      shouldFail: () => false,
+      simulate: () => null,
     );
 
     _router = RouterLlmProvider(
@@ -140,7 +146,7 @@ class _DemoPageState extends State<DemoPage> {
           ),
         ],
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(112),
+          preferredSize: const Size.fromHeight(160),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: Column(
@@ -153,6 +159,17 @@ class _DemoPageState extends State<DemoPage> {
                     Switch(
                       value: _failOpenAi,
                       onChanged: (value) => setState(() => _failOpenAi = value),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text('Simulate OpenAI network failure'),
+                    ),
+                    Switch(
+                      value: _dropOpenAi,
+                      onChanged: (value) => setState(() => _dropOpenAi = value),
                     ),
                   ],
                 ),
@@ -181,6 +198,48 @@ class _DemoPageState extends State<DemoPage> {
             'Tap the key icon at top right to enter your API keys. '
             'Use the outage switches above to test live failover!',
         suggestions: const ['Hello', 'Count to three'],
+        onErrorCallback: _showError,
+      ),
+    );
+  }
+
+  void _showError(BuildContext context, LlmException error) {
+    if (error.message == NoInternetConnectionException.defaultMessage) {
+      final colors = Theme.of(context).colorScheme;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: colors.errorContainer,
+            content: Row(
+              children: [
+                Icon(Icons.wifi_off, color: colors.onErrorContainer),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'No internet connection. Check your network and try again.',
+                    style: TextStyle(color: colors.onErrorContainer),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      return;
+    }
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.error_outline),
+        title: const Text('Something went wrong'),
+        content: Text(error.message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
       ),
     );
   }
@@ -296,29 +355,44 @@ String _failureStatus(AttemptLog log) {
   return 'failed';
 }
 
+enum _SimulatedFailure { rateLimit, network }
+
 class _FailableAdapter extends BaseLlmAdapter {
   _FailableAdapter({
     required this.delegate,
     required this.apiKey,
-    required this.shouldFail,
+    required this.simulate,
   });
 
   final BaseLlmAdapter delegate;
   final TextEditingController apiKey;
-  final bool Function() shouldFail;
+  final _SimulatedFailure? Function() simulate;
 
   @override
   Stream<AdapterChunk> streamCompletion({
     required ProviderConfig config,
     required List<ChatTurn> messages,
   }) {
-    if (shouldFail()) {
-      return Stream<AdapterChunk>.error(
-        RetryableLlmException(
-          'Simulated HTTP 429 for ${config.name} (${config.model})',
-          statusCode: 429,
-        ),
-      );
+    switch (simulate()) {
+      case _SimulatedFailure.rateLimit:
+        return Stream<AdapterChunk>.error(
+          RetryableLlmException(
+            'Simulated HTTP 429 for ${config.name} (${config.model})',
+            statusCode: 429,
+          ),
+        );
+      case _SimulatedFailure.network:
+        // A connection-level failure: the router probes connectivity and,
+        // when the device is online, fails over to the next provider.
+        return Stream<AdapterChunk>.error(
+          RetryableLlmException(
+            'Simulated connection failure for ${config.name} '
+            '(${config.model})',
+            cause: http.ClientException('Simulated host unreachable'),
+          ),
+        );
+      case null:
+        break;
     }
     return delegate.streamCompletion(
       config: config.copyWith(apiKey: apiKey.text.trim()),

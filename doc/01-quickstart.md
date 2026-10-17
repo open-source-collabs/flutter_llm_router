@@ -17,7 +17,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_ai_toolkit: ^1.0.0
-  flutter_llm_router: ^1.0.3
+  flutter_llm_router: ^1.1.0
 ```
 
 Requires Dart `^3.7.0` and Flutter `>=3.27.0`. Fully supported on Windows, macOS, Linux, Android, iOS, and Web.

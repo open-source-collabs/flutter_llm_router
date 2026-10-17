@@ -13,6 +13,7 @@ A resilient multi-provider LLM router for Flutter AI Toolkit. `RouterLlmProvider
 ## Features
 
 - **Transparent Failover**: Tries configured LLM providers in priority order. Automatically recovers from rate limits (HTTP 429), timeouts, and 5xx errors.
+- **Connectivity-Aware Failover**: On a connection error, silently probes the internet. If the device is offline, it stops with a clear `NoInternetConnectionException` instead of cycling through every provider.
 - **Drop-in UI Integration**: Compatible with Flutter AI Toolkit's `LlmChatView`.
 - **Multi-Provider Support**: Built-in adapters for OpenAI, Google Gemini, Anthropic Claude, and OpenRouter, plus custom adapters.
 - **Live Token & Cost Tracking**: Configurable USD token pricing with real-time `ValueNotifier` updates.
@@ -33,7 +34,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_ai_toolkit: ^1.0.0
-  flutter_llm_router: ^1.0.3
+  flutter_llm_router: ^1.1.0
 ```
 
 ## Problem
@@ -45,6 +46,7 @@ A single upstream outage, HTTP 429 rate limit, or network timeout breaks the cha
 Point `LlmChatView` at one `RouterLlmProvider`. The router tries each `ProviderConfig` in order:
 
 - HTTP 429, 408, 5xx, timeouts, and dropped sockets raise `RetryableLlmException` and move to the next provider (as long as no text has been yielded yet).
+- On a connection error or timeout, the router silently checks whether the device is online (once per request). If it is offline, the router throws `NoInternetConnectionException`. If it is online, only that provider is unreachable, so the router moves to the next one.
 - HTTP 400, 401, and 403 raise `TerminalLlmException` and stop the chain immediately.
 - If every provider fails, the router throws `AllProvidersFailedException` containing the complete attempt history.
 - Completed streams update `CostTracker` and `lastAttemptLogs`.

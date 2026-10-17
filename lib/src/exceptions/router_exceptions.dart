@@ -41,6 +41,37 @@ class TerminalLlmException extends LlmRouterException {
   const TerminalLlmException(super.message, {super.statusCode, super.cause});
 }
 
+/// A provider connection failed and a connectivity probe confirmed the
+/// device is offline, so the router stopped instead of failing over.
+///
+/// [toString] returns only [message], so UI that displays the error as text
+/// (such as `LlmChatView`'s default error dialog) shows a readable sentence.
+class NoInternetConnectionException extends LlmRouterException {
+  /// Creates an offline failure that retains the [attempts] made so far.
+  ///
+  /// [cause] is the provider failure that triggered the connectivity probe.
+  NoInternetConnectionException(
+    List<AttemptLog> attempts, {
+    String message = defaultMessage,
+    super.cause,
+  })  : attempts = List<AttemptLog>.unmodifiable(attempts),
+        super(message);
+
+  /// Message used when none is given.
+  ///
+  /// `LlmChatView` passes `onErrorCallback` an `LlmFailureException` whose
+  /// message is this exception's [toString], so apps can compare against this
+  /// constant to recognize the offline case.
+  static const String defaultMessage =
+      'No internet connection. Please check your network and try again.';
+
+  /// Attempt records in the order the providers were called.
+  final List<AttemptLog> attempts;
+
+  @override
+  String toString() => message;
+}
+
 /// Every configured provider failed before a response was produced.
 class AllProvidersFailedException extends LlmRouterException {
   /// Creates an exception that retains each provider [attempts] record.

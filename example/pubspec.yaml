@@ -13,6 +13,7 @@ dependencies:
   flutter_ai_toolkit: ^1.0.0
   flutter_llm_router:
     path: ../
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

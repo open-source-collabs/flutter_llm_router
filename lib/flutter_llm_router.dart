@@ -13,6 +13,7 @@ export 'src/adapters/base_adapter.dart';
 export 'src/adapters/gemini_adapter.dart';
 export 'src/adapters/openai_adapter.dart';
 export 'src/adapters/openrouter_adapter.dart';
+export 'src/connectivity/connectivity_checker.dart';
 export 'src/exceptions/router_exceptions.dart';
 export 'src/models/adapter_chunk.dart';
 export 'src/models/attempt_log.dart';

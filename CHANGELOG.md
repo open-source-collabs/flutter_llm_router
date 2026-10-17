@@ -5,6 +5,12 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-10-17
+
+- Added connectivity-aware failover. When a provider fails with a connection error or timeout, `RouterLlmProvider` silently probes the internet once per request. If the device is offline, it throws the new `NoInternetConnectionException` instead of trying every provider. If the device is online, it fails over as before.
+- Added `ConnectivityChecker` and `HttpConnectivityChecker`. The default probe is `https://www.google.com/generate_204` with a 3-second timeout, using `HEAD` on native platforms and a `no-cors` `fetch` on web. Configure it through `RouterLlmProvider(connectivityChecker: ...)`.
+- Example app: added a "Simulate OpenAI network failure" switch and an offline SnackBar through `LlmChatView.onErrorCallback`.
+
 ## [1.0.4] - 2026-10-11
 
 - Added screenshots to the pub.dev listing: failover, cost tracking, and quickstart.

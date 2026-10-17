@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
+import 'package:http/http.dart' as http;
 
 import 'adapters/anthropic_adapter.dart';
 import 'adapters/base_adapter.dart';
 import 'adapters/gemini_adapter.dart';
 import 'adapters/openai_adapter.dart';
 import 'adapters/openrouter_adapter.dart';
+import 'connectivity/connectivity_checker.dart';
 import 'exceptions/router_exceptions.dart';
 import 'models/adapter_chunk.dart';
 import 'models/attempt_log.dart';
@@ -22,6 +24,12 @@ import 'tracking/cost_tracker.dart';
 /// and the next provider is tried. A [TerminalLlmException] is logged and
 /// rethrown. When every provider fails, the loop throws
 /// [AllProvidersFailedException].
+///
+/// When a provider fails with a connection error or timeout, the router asks
+/// [connectivityChecker] whether the device is online, at most once per
+/// request. If it is offline, the loop stops with
+/// [NoInternetConnectionException] instead of trying the remaining
+/// providers. If it is online, failover continues as usual.
 ///
 /// Built-in adapter names are `openai`, `anthropic`, `gemini`, and
 /// `openrouter` (case-insensitive). `openrouter` speaks the OpenAI
@@ -42,13 +50,17 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
   /// keep ownership in the caller. [customAdapters] is keyed by
   /// [ProviderConfig.name]; injected adapters are not closed by [dispose].
   /// [history] seeds the conversation shown by `LlmChatView`.
+  /// [connectivityChecker] defaults to an [HttpConnectivityChecker] that
+  /// probes Google.
   RouterLlmProvider({
     required List<ProviderConfig> providers,
     CostTracker? costTracker,
     Map<String, BaseLlmAdapter>? customAdapters,
     Iterable<ChatMessage>? history,
+    ConnectivityChecker? connectivityChecker,
   })  : assert(providers.isNotEmpty, 'providers must not be empty'),
         providers = List<ProviderConfig>.unmodifiable(providers),
+        connectivityChecker = connectivityChecker ?? HttpConnectivityChecker(),
         _ownsCostTracker = costTracker == null,
         costTracker = costTracker ?? CostTracker(),
         _customAdapters = Map<String, BaseLlmAdapter>.unmodifiable(
@@ -61,6 +73,9 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
 
   /// Accumulated token usage and estimated spend.
   final CostTracker costTracker;
+
+  /// Decides whether a connection failure means the device is offline.
+  final ConnectivityChecker connectivityChecker;
 
   final bool _ownsCostTracker;
   final Map<String, BaseLlmAdapter> _customAdapters;
@@ -153,6 +168,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
   Stream<String> _route(List<ChatTurn> messages) async* {
     final logs = <AttemptLog>[];
     _replaceLogs(logs);
+    var confirmedOnline = false;
 
     for (final config in providers) {
       final stopwatch = Stopwatch()..start();
@@ -201,6 +217,12 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
         );
         _replaceLogs(logs);
         if (emitted) rethrow;
+        if (!confirmedOnline && _isConnectionFailure(error)) {
+          if (!await connectivityChecker.hasInternet()) {
+            throw NoInternetConnectionException(logs, cause: error);
+          }
+          confirmedOnline = true;
+        }
       } on TerminalLlmException catch (error) {
         stopwatch.stop();
         logs.add(
@@ -296,6 +318,13 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     }
     return turns;
   }
+}
+
+/// Whether [error] came from the transport (connect failure, dropped socket,
+/// or timeout) rather than from an HTTP status such as 429 or 503.
+bool _isConnectionFailure(RetryableLlmException error) {
+  final cause = error.cause;
+  return cause is http.ClientException || cause is TimeoutException;
 }
 
 String _turnText(List<ChatTurn> messages) {

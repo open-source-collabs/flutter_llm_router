@@ -34,7 +34,7 @@ const config = ProviderConfig(
 
 `timeout` bounds `Client.send`, the wait for HTTP headers. It does not cut the stream off between tokens. When it fires, the adapter throws `RetryableLlmException` and the router tries the next provider if no text has been yielded.
 
-A dropped socket or other `ClientException` is also retryable.
+A dropped socket or other `ClientException` is also retryable. See [Connectivity check](#connectivity-check) for what the router does before failing over on these.
 
 ## baseUrl
 
@@ -69,11 +69,39 @@ The request still uses that vendor's JSON shape. An OpenAI-compatible proxy work
 | Condition | Exception | Router |
 | --- | --- | --- |
 | HTTP 429, 408, 500–599 | `RetryableLlmException` | Next provider, if no token was yielded |
-| Timeout, socket drop | `RetryableLlmException` | Next provider, if no token was yielded |
+| Timeout, socket drop, device online | `RetryableLlmException` | Next provider, if no token was yielded |
+| Timeout, socket drop, device offline | `NoInternetConnectionException` | Chain stops. `attempts` holds the logs so far |
 | HTTP 400, 401, 403, other 4xx | `TerminalLlmException` | Logged and rethrown. Later providers are not called |
 | Retryable error after text started | `RetryableLlmException` | Rethrown. The partial answer is not restarted |
 | Every provider failed first | `AllProvidersFailedException` | `attempts` holds each `AttemptLog` |
 
 Unknown `name` values throw `TerminalLlmException` unless `customAdapters` supplies that name.
+
+## Connectivity check
+
+A connection error or timeout can mean the provider is down or the device is offline. Before failing over on one, the router calls `connectivityChecker.hasInternet()`. It does this at most once per request and shows nothing to the user.
+
+- `false`: the router throws `NoInternetConnectionException` and skips the remaining providers.
+- `true`: the router fails over as usual.
+
+HTTP status failures such as 429 and 503 never trigger the check.
+
+The default `HttpConnectivityChecker` probes `https://www.google.com/generate_204` with a 3-second timeout. Any HTTP response counts as online. Native platforms send a `HEAD` request. Web uses a `no-cors` `fetch`, so CORS does not hide a reachable host.
+
+Use a different probe where Google is blocked:
+
+```dart
+RouterLlmProvider(
+  providers: providers,
+  connectivityChecker: HttpConnectivityChecker(
+    probeUrl: Uri.parse('https://example.com/health'),
+    timeout: const Duration(seconds: 2),
+  ),
+);
+```
+
+To turn the check off, pass a `ConnectivityChecker` whose `hasInternet` always returns `true`.
+
+`NoInternetConnectionException.toString()` returns its plain message. `LlmChatView` hands `onErrorCallback` an `LlmFailureException` carrying that text, so compare `error.message` with `NoInternetConnectionException.defaultMessage` to show an offline UI.
 
 `sendMessageStream` sends each stored turn as its own message. `generateStream` sends only the current prompt. OpenAI-compatible and Anthropic requests put that cap in `max_tokens`. Gemini puts it in `generationConfig.maxOutputTokens`. Anthropic also sends `anthropic-version: 2023-06-01`.
