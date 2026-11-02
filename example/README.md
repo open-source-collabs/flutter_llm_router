@@ -1,14 +1,20 @@
 # flutter_llm_router example
 
-Chat demo for the router. Every hop uses the built-in `openrouter` adapter (`https://openrouter.ai/api/v1`), so one key can exercise the failover chain:
+Chat demo for the router. It uses direct provider keys and walks this failover chain:
 
-1. `openai/gpt-4o-mini`
-2. `google/gemini-2.5-flash`
-3. `anthropic/claude-haiku-4.5`
+1. OpenAI `gpt-4o-mini`
+2. Google Gemini `gemini-2.0-flash`
+3. Anthropic `claude-3-5-haiku-20241022`
 
-Enter the OpenRouter key from the key icon. Leave both switches off to stay on the first model. Turn on **Simulate primary outage (HTTP 429)** to land on Gemini. Turn on **Also fail Gemini** as well to land on Anthropic. The app bar shows conversation spend. The receipt icon lists attempt latency, provider name, and error status.
+Enter your keys from the key icon, or pass them at build time with `--dart-define=OPENAI_API_KEY=...`, `GEMINI_API_KEY`, and `ANTHROPIC_API_KEY`. Keys passed this way are embedded in the build, so use them for local development only.
 
-Direct OpenAI, Gemini, and Anthropic credentials stay on the package adapters. This example does not call those vendor APIs.
+Use the switches to test failover:
+
+- **Simulate OpenAI outage (HTTP 429)** lands on Gemini.
+- **Also simulate Gemini outage**, with the switch above, lands on Anthropic.
+- **Simulate OpenAI network failure** probes connectivity, then fails over if the device is online. If it is offline, the app shows a "No internet connection" message.
+
+The app bar shows conversation spend. The receipt icon lists attempt latency, provider name, and error status.
 
 ## Running the Example
 
@@ -17,6 +23,12 @@ Direct OpenAI, Gemini, and Anthropic credentials stay on the package adapters. T
 flutter run -d windows
 ```
 > Note: Building the Windows desktop runner requires Visual Studio with the "Desktop development with C++" workload.
+
+### macOS Desktop
+```sh
+flutter run -d macos
+```
+> Note: Building for macOS requires Xcode.
 
 ### Linux Desktop
 ```sh
@@ -29,6 +41,7 @@ flutter run -d linux
 ```sh
 flutter run -d chrome
 ```
+> Note: Browsers may block direct calls to some provider APIs (CORS). Use a backend proxy if a provider fails only on web.
 
 ### Connected Mobile Device or Emulator
 ```sh
