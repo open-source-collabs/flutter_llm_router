@@ -1,0 +1,6 @@
+tags:
+  # Live vendor calls in test/contract. They skip without API keys.
+  contract:
+    timeout: 3x
+  # Seeded failure-injection run in test/chaos.
+  chaos:

@@ -9,6 +9,9 @@
 *.iws
 .DS_Store
 
+# Generated API docs
+doc/api/
+
 # Dart and Flutter tooling
 .dart_tool/
 .packages
