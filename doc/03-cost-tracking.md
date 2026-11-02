@@ -42,7 +42,13 @@ A zero-cost update does not notify, because `ValueNotifier` skips an unchanged v
 
 ## When usage is recorded
 
-The router calls `recordUsage` only after a provider stream finishes without error. Failover attempts that threw before the first token are logged and are not billed. A retryable error after text has already been yielded is not billed either. The partial text was already shown.
+The router calls `recordUsage` for every attempt that a provider is likely to charge for:
+
+- a stream that finishes with text,
+- a stream that fails or is cancelled after text was yielded, priced on the partial text,
+- any attempt where the provider reported token counts, even if it then failed.
+
+A failed attempt with no text and no reported usage is logged and not billed. Gemini thinking tokens count as output tokens.
 
 ```dart
 costTracker.recordUsage(
@@ -52,19 +58,53 @@ costTracker.recordUsage(
 );
 ```
 
-`recordUsage` adds the token counts, then adds `config.calculateCost(...)` to the running total.
+`recordUsage` adds the token counts, then adds `config.calculateCost(...)` to the running total. Its optional `cachedInputTokens` argument is the part of `inputTokens` read from the prompt cache.
 
-`recordCost` adds a raw USD amount and does not change the token counters. `reset` sets cost and both counters back to zero and notifies listeners when the cost actually changes.
+`recordCost` adds a raw USD amount and does not change the token counters or the provider breakdown. `reset` sets cost, every counter, and the breakdown back to zero and notifies listeners when the cost actually changes.
+
+Each recorded attempt is also reported as a `UsageRecorded` event on `router.events`. See [Observability](06-observability.md).
+
+## Per-provider breakdown
+
+`usageByProvider` maps each `ProviderConfig.name` to a `ProviderUsage` with `inputTokens`, `cachedInputTokens`, `outputTokens`, and `cost`. `costFor(name)` returns one provider's spend.
+
+```dart
+for (final entry in router.costTracker.usageByProvider.entries) {
+  print('${entry.key}: \$${entry.value.cost.toStringAsFixed(6)}');
+}
+```
+
+`BudgetPolicy` uses these totals for its per-provider and session limits. See [Budgets](05-reliability-policies.md#budgets).
+
+## Cached tokens
+
+Vendors charge less for prompt tokens served from their cache. Set `pricePerCachedInputToken` to that rate:
+
+```dart
+ProviderConfig(
+  name: 'openai',
+  apiKey: key,
+  model: 'gpt-4o-mini',
+  pricePerInputToken: 0.00000015,
+  pricePerCachedInputToken: 0.000000075,
+  pricePerOutputToken: 0.0000006,
+)
+```
+
+Cost is then `(inputTokens - cachedInputTokens) * pricePerInputToken + cachedInputTokens * pricePerCachedInputToken + outputTokens * pricePerOutputToken`. Without it, cached tokens cost the normal input price. `totalCachedInputTokens` holds the running count.
 
 ## Token accounting
 
 The router uses a count when the winning provider reports it:
 
-| Provider | Input field | Output field |
-| --- | --- | --- |
-| OpenAI and OpenRouter | `usage.prompt_tokens` | `usage.completion_tokens` |
-| Anthropic | `message_start.message.usage.input_tokens` | `message_delta.usage.output_tokens` |
-| Gemini | `usageMetadata.promptTokenCount` | `usageMetadata.candidatesTokenCount` |
+| Provider | Input field | Output field | Cached input field |
+| --- | --- | --- | --- |
+| OpenAI, OpenRouter, Azure, and compatible hosts | `usage.prompt_tokens` | `usage.completion_tokens` | `usage.prompt_tokens_details.cached_tokens`, or DeepSeek's `prompt_cache_hit_tokens` |
+| Groq | `x_groq.usage.prompt_tokens` when `usage` is absent | `x_groq.usage.completion_tokens` | None |
+| Anthropic | `input_tokens` + `cache_read_input_tokens` + `cache_creation_input_tokens` from `message_start` | `message_delta.usage.output_tokens` | `cache_read_input_tokens` |
+| Gemini | `usageMetadata.promptTokenCount` | `candidatesTokenCount` + `thoughtsTokenCount` | `cachedContentTokenCount` |
+
+Anthropic cache writes are counted as ordinary input tokens. Anthropic charges a premium for them, so the estimate is slightly low when you write to its cache.
 
 OpenAI-compatible requests set `stream_options.include_usage` so the final SSE event can carry `usage`. A side that never arrives falls back to:
 
