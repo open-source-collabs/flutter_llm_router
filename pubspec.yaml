@@ -1,12 +1,12 @@
 name: flutter_llm_router
-description: "A resilient multi-provider LLM router for Flutter AI Toolkit featuring transparent failover, token cost tracking, and attempt logging."
-version: 1.1.0
+description: "Production reliability layer for LLMs in Flutter AI Toolkit: multi-provider failover, retries, circuit breaking, budgets, attachments, cost tracking, and live observability."
+version: 1.2.0
 repository: https://github.com/open-source-collabs/flutter_llm_router
 issue_tracker: https://github.com/open-source-collabs/flutter_llm_router/issues
 
 environment:
-  sdk: ^3.7.0
-  flutter: ">=3.27.0"
+  sdk: ^3.8.0
+  flutter: ">=3.32.0"
 
 platforms:
   android:

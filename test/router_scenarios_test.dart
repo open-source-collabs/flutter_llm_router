@@ -76,58 +76,54 @@ void main() {
       );
 
       expect(await router.generateStream('ping').join(), 'ok');
-      expect(models, <String>[
-        'openai/gpt-4o-mini',
-        'google/gemini-2.5-flash',
-      ]);
-      expect(
-        router.lastAttemptLogs.map((log) => log.model).toList(),
-        models,
-      );
+      expect(models, <String>['openai/gpt-4o-mini', 'google/gemini-2.5-flash']);
+      expect(router.lastAttemptLogs.map((log) => log.model).toList(), models);
       expect(router.lastAttemptLogs.map((log) => log.providerName).toSet(), {
         'openrouter',
       });
     });
 
-    test('an unknown name is terminal and the rest of the chain is skipped',
-        () async {
-      final calls = <String>[];
-      final router = _router(
-        providers: [
-          _config('alpha'),
-          _config('not-a-provider'),
-          _config('gamma'),
-        ],
-        adapters: {
-          'alpha': (config, messages) {
-            calls.add(config.name);
-            return Stream<AdapterChunk>.error(
-              const RetryableLlmException('busy', statusCode: 503),
-            );
+    test(
+      'an unknown name is terminal and the rest of the chain is skipped',
+      () async {
+        final calls = <String>[];
+        final router = _router(
+          providers: [
+            _config('alpha'),
+            _config('not-a-provider'),
+            _config('gamma'),
+          ],
+          adapters: {
+            'alpha': (config, messages) {
+              calls.add(config.name);
+              return Stream<AdapterChunk>.error(
+                const RetryableLlmException('busy', statusCode: 503),
+              );
+            },
+            'gamma': (config, messages) {
+              calls.add(config.name);
+              return Stream<AdapterChunk>.value(const AdapterText('late'));
+            },
           },
-          'gamma': (config, messages) {
-            calls.add(config.name);
-            return Stream<AdapterChunk>.value(const AdapterText('late'));
-          },
-        },
-      );
+        );
 
-      await expectLater(
-        router.generateStream('ping').toList(),
-        throwsA(
-          isA<TerminalLlmException>().having(
-            (error) => error.message,
-            'message',
-            contains('not-a-provider'),
+        await expectLater(
+          router.generateStream('ping').toList(),
+          throwsA(
+            isA<TerminalLlmException>().having(
+              (error) => error.message,
+              'message',
+              contains('not-a-provider'),
+            ),
           ),
-        ),
-      );
-      expect(calls, <String>['alpha']);
-      expect(router.lastAttemptLogs, hasLength(2));
-      expect(router.lastAttemptLogs.last.providerName, 'not-a-provider');
-      expect(router.lastAttemptLogs.last.isSuccess, isFalse);
-      expect(router.costTracker.totalCost, 0);
-    });
+        );
+        expect(calls, <String>['alpha']);
+        expect(router.lastAttemptLogs, hasLength(2));
+        expect(router.lastAttemptLogs.last.providerName, 'not-a-provider');
+        expect(router.lastAttemptLogs.last.isSuccess, isFalse);
+        expect(router.costTracker.totalCost, 0);
+      },
+    );
 
     test('customAdapters match the configured name exactly', () async {
       final router = _router(
@@ -167,28 +163,31 @@ void main() {
       expect(router.lastAttemptLogs.single.providerName, 'openai');
     });
 
-    test('usage alone does not count as started text, so failover continues',
-        () async {
-      final router = _router(
-        providers: [_config('alpha', inputPrice: 9), _config('beta')],
-        adapters: {
-          'alpha': (config, messages) async* {
-            yield const AdapterUsage(inputTokens: 99, outputTokens: 99);
-            throw const RetryableLlmException('dropped', statusCode: 503);
+    test(
+      'usage alone does not count as started text, but is still billed',
+      () async {
+        final router = _router(
+          providers: [_config('alpha', inputPrice: 9), _config('beta')],
+          adapters: {
+            'alpha': (config, messages) async* {
+              yield const AdapterUsage(inputTokens: 99, outputTokens: 99);
+              throw const RetryableLlmException('dropped', statusCode: 503);
+            },
+            'beta': (config, messages) {
+              return Stream<AdapterChunk>.value(const AdapterText('pong'));
+            },
           },
-          'beta': (config, messages) {
-            return Stream<AdapterChunk>.value(const AdapterText('pong'));
-          },
-        },
-      );
+        );
 
-      expect(await router.generateStream('ping').join(), 'pong');
-      expect(router.costTracker.totalInputTokens, 1);
-      expect(router.costTracker.totalOutputTokens, 1);
-      expect(router.lastAttemptLogs.first.isSuccess, isFalse);
-    });
+        expect(await router.generateStream('ping').join(), 'pong');
+        expect(router.costTracker.totalInputTokens, 99 + 1);
+        expect(router.costTracker.totalOutputTokens, 99 + 1);
+        expect(router.costTracker.totalCost, 99 * 9);
+        expect(router.lastAttemptLogs.first.isSuccess, isFalse);
+      },
+    );
 
-    test('an empty text chunk blocks failover', () async {
+    test('an empty text chunk does not block failover', () async {
       final calls = <String>[];
       final router = _router(
         providers: [_config('alpha'), _config('beta')],
@@ -205,59 +204,53 @@ void main() {
         },
       );
 
-      final chunks = <String>[];
-      await expectLater(
-        router.generateStream('ping').forEach(chunks.add),
-        throwsA(isA<RetryableLlmException>()),
-      );
-      expect(chunks, <String>['']);
-      expect(calls, <String>['alpha']);
+      expect(await router.generateStream('ping').toList(), <String>['pong']);
+      expect(calls, <String>['alpha', 'beta']);
       expect(router.costTracker.totalCost, 0);
     });
 
-    test('a later call replaces attempt logs and does not bill failures',
-        () async {
-      var fail = true;
-      final router = _router(
-        providers: [
-          _config('alpha'),
-          _config('beta', inputPrice: 0.000001, outputPrice: 0.000002),
-        ],
-        adapters: {
-          'alpha': (config, messages) {
-            return Stream<AdapterChunk>.error(
-              const RetryableLlmException('busy', statusCode: 503),
-            );
-          },
-          'beta': (config, messages) {
-            if (fail) {
+    test(
+      'a later call replaces attempt logs and does not bill failures',
+      () async {
+        var fail = true;
+        final router = _router(
+          providers: [
+            _config('alpha'),
+            _config('beta', inputPrice: 0.000001, outputPrice: 0.000002),
+          ],
+          adapters: {
+            'alpha': (config, messages) {
               return Stream<AdapterChunk>.error(
-                const RetryableLlmException('down', statusCode: 502),
+                const RetryableLlmException('busy', statusCode: 503),
               );
-            }
-            return Stream<AdapterChunk>.value(const AdapterText('pong'));
+            },
+            'beta': (config, messages) {
+              if (fail) {
+                return Stream<AdapterChunk>.error(
+                  const RetryableLlmException('down', statusCode: 502),
+                );
+              }
+              return Stream<AdapterChunk>.value(const AdapterText('pong'));
+            },
           },
-        },
-      );
+        );
 
-      await expectLater(
-        router.generateStream('ping').toList(),
-        throwsA(isA<AllProvidersFailedException>()),
-      );
-      expect(router.lastAttemptLogs, hasLength(2));
-      expect(router.costTracker.totalCost, 0);
-      expect(
-        () => router.lastAttemptLogs.clear(),
-        throwsUnsupportedError,
-      );
+        await expectLater(
+          router.generateStream('ping').toList(),
+          throwsA(isA<AllProvidersFailedException>()),
+        );
+        expect(router.lastAttemptLogs, hasLength(2));
+        expect(router.costTracker.totalCost, 0);
+        expect(() => router.lastAttemptLogs.clear(), throwsUnsupportedError);
 
-      fail = false;
-      expect(await router.generateStream('ping').join(), 'pong');
-      expect(router.lastAttemptLogs, hasLength(2));
-      expect(router.lastAttemptLogs.last.isSuccess, isTrue);
-      expect(router.costTracker.totalInputTokens, 1);
-      expect(router.costTracker.totalOutputTokens, 1);
-    });
+        fail = false;
+        expect(await router.generateStream('ping').join(), 'pong');
+        expect(router.lastAttemptLogs, hasLength(2));
+        expect(router.lastAttemptLogs.last.isSuccess, isTrue);
+        expect(router.costTracker.totalInputTokens, 1);
+        expect(router.costTracker.totalOutputTokens, 1);
+      },
+    );
   });
 
   group('token accounting', () {
@@ -279,7 +272,7 @@ void main() {
       expect(router.costTracker.totalOutputTokens, 1);
     });
 
-    test('an empty reply is zero output tokens and still a success', () async {
+    test('an empty reply is a failure and is not billed', () async {
       final router = _router(
         providers: [_config('beta')],
         adapters: {
@@ -287,34 +280,42 @@ void main() {
         },
       );
 
-      expect(await router.generateStream('').join(), isEmpty);
-      expect(router.lastAttemptLogs.single.isSuccess, isTrue);
+      await expectLater(
+        router.generateStream('').join(),
+        throwsA(isA<AllProvidersFailedException>()),
+      );
+      expect(router.lastAttemptLogs.single.isSuccess, isFalse);
       expect(router.lastAttemptLogs.single.latencyMs, greaterThanOrEqualTo(0));
       expect(router.costTracker.totalInputTokens, 0);
       expect(router.costTracker.totalOutputTokens, 0);
     });
 
-    test('an explicit zero from the provider beats the character estimate',
-        () async {
-      final router = _router(
-        providers: [
-          _config('beta', inputPrice: 0.000001, outputPrice: 0.000002),
-        ],
-        adapters: {
-          'beta': (config, messages) {
-            return Stream<AdapterChunk>.fromIterable(const <AdapterChunk>[
-              AdapterText('hello world'),
-              AdapterUsage(inputTokens: 0, outputTokens: 0),
-            ]);
+    test(
+      'an explicit zero from the provider beats the character estimate',
+      () async {
+        final router = _router(
+          providers: [
+            _config('beta', inputPrice: 0.000001, outputPrice: 0.000002),
+          ],
+          adapters: {
+            'beta': (config, messages) {
+              return Stream<AdapterChunk>.fromIterable(const <AdapterChunk>[
+                AdapterText('hello world'),
+                AdapterUsage(inputTokens: 0, outputTokens: 0),
+              ]);
+            },
           },
-        },
-      );
+        );
 
-      expect(await router.generateStream('hello world').join(), 'hello world');
-      expect(router.costTracker.totalInputTokens, 0);
-      expect(router.costTracker.totalOutputTokens, 0);
-      expect(router.costTracker.totalCost, 0);
-    });
+        expect(
+          await router.generateStream('hello world').join(),
+          'hello world',
+        );
+        expect(router.costTracker.totalInputTokens, 0);
+        expect(router.costTracker.totalOutputTokens, 0);
+        expect(router.costTracker.totalCost, 0);
+      },
+    );
 
     test('a reported side is kept and the missing side is estimated', () async {
       final router = _router(
@@ -336,55 +337,59 @@ void main() {
       expect(router.costTracker.totalOutputTokens, 8);
     });
 
-    test('joined history is estimated as one string, separators included',
-        () async {
-      final seen = <String>[];
-      final router = _router(
-        providers: [_config('beta')],
-        history: <ChatMessage>[
-          ChatMessage.user('a', const []),
-          ChatMessage.llm()..append('b'),
-        ],
-        adapters: {
-          'beta': (config, messages) {
-            seen.add(messages.map((turn) => turn.text).join('\n'));
-            return Stream<AdapterChunk>.value(const AdapterText('z'));
+    test(
+      'joined history is estimated as one string, separators included',
+      () async {
+        final seen = <String>[];
+        final router = _router(
+          providers: [_config('beta')],
+          history: <ChatMessage>[
+            ChatMessage.user('a', const []),
+            ChatMessage.llm()..append('b'),
+          ],
+          adapters: {
+            'beta': (config, messages) {
+              seen.add(messages.map((turn) => turn.text).join('\n'));
+              return Stream<AdapterChunk>.value(const AdapterText('z'));
+            },
           },
-        },
-      );
+        );
 
-      await router.sendMessageStream('c').drain<void>();
+        await router.sendMessageStream('c').drain<void>();
 
-      // "a\nb\nc" is 5 characters, so the estimate is 2, not 1+1+1.
-      expect(seen.single, 'a\nb\nc');
-      expect(router.costTracker.totalInputTokens, 2);
-      expect(router.costTracker.totalOutputTokens, 1);
-    });
+        // "a\nb\nc" is 5 characters, so the estimate is 2, not 1+1+1.
+        expect(seen.single, 'a\nb\nc');
+        expect(router.costTracker.totalInputTokens, 2);
+        expect(router.costTracker.totalOutputTokens, 1);
+      },
+    );
 
-    test('a free provider moves token counters without notifying spend',
-        () async {
-      final observed = <double>[];
-      final router = _router(
-        providers: [_config('beta')],
-        adapters: {
-          'beta': (config, messages) {
-            return Stream<AdapterChunk>.value(const AdapterText('pong'));
+    test(
+      'a free provider moves token counters without notifying spend',
+      () async {
+        final observed = <double>[];
+        final router = _router(
+          providers: [_config('beta')],
+          adapters: {
+            'beta': (config, messages) {
+              return Stream<AdapterChunk>.value(const AdapterText('pong'));
+            },
           },
-        },
-      );
-      router.costTracker.totalCostNotifier.addListener(() {
-        observed.add(router.costTracker.totalCost);
-      });
+        );
+        router.costTracker.totalCostNotifier.addListener(() {
+          observed.add(router.costTracker.totalCost);
+        });
 
-      await router.generateStream('ping').drain<void>();
+        await router.generateStream('ping').drain<void>();
 
-      expect(observed, isEmpty);
-      expect(router.costTracker.totalInputTokens, 1);
-      expect(router.costTracker.totalOutputTokens, 1);
-      expect(router.costTracker.totalCost, 0);
-    });
+        expect(observed, isEmpty);
+        expect(router.costTracker.totalInputTokens, 1);
+        expect(router.costTracker.totalOutputTokens, 1);
+        expect(router.costTracker.totalCost, 0);
+      },
+    );
 
-    test('a terminal failure and a mid-stream drop are not billed', () async {
+    test('a terminal failure is not billed, a mid-stream drop is', () async {
       final router = _router(
         providers: [_config('alpha', inputPrice: 1, outputPrice: 1)],
         adapters: {
@@ -415,8 +420,8 @@ void main() {
         partial.generateStream('ping').drain<void>(),
         throwsA(isA<RetryableLlmException>()),
       );
-      expect(partial.costTracker.totalInputTokens, 0);
-      expect(partial.costTracker.totalOutputTokens, 0);
+      expect(partial.costTracker.totalInputTokens, 1);
+      expect(partial.costTracker.totalOutputTokens, 2);
     });
   });
 
@@ -429,12 +434,16 @@ void main() {
         bytes: Uint8List.fromList(<int>[1, 2, 3]),
       );
       final seen = <String>[];
+      final attachmentNames = <String>[];
       final router = _router(
         providers: [_config('beta')],
         history: <ChatMessage>[ChatMessage.user('seed', const [])],
         adapters: {
           'beta': (config, messages) {
             seen.add(messages.single.text);
+            attachmentNames.addAll(
+              messages.single.attachments.map((a) => a.name),
+            );
             return Stream<AdapterChunk>.fromIterable(const <AdapterChunk>[
               AdapterText('Hel'),
               AdapterText('lo'),
@@ -445,11 +454,12 @@ void main() {
       router.addListener(() => notifications++);
 
       final text = await router
-          .generateStream('look', attachments: <Attachment>[attachment]).join();
+          .generateStream('look', attachments: <Attachment>[attachment])
+          .join();
 
       expect(text, 'Hello');
-      expect(seen.single, contains('look'));
-      expect(seen.single, contains('FileAttachment(name: notes.txt'));
+      expect(seen.single, 'look');
+      expect(attachmentNames, <String>['notes.txt']);
       expect(router.history.single.text, 'seed');
       expect(notifications, 0);
       expect(
@@ -460,59 +470,63 @@ void main() {
       );
     });
 
-    test('sendMessageStream stores the turn, yields into history, and notifies',
-        () async {
-      var notifications = 0;
-      final router = _router(
-        providers: [_config('beta')],
-        adapters: {
-          'beta': (config, messages) {
-            return Stream<AdapterChunk>.fromIterable(const <AdapterChunk>[
-              AdapterText('one'),
-              AdapterText(' two'),
-            ]);
+    test(
+      'sendMessageStream stores the turn, yields into history, and notifies',
+      () async {
+        var notifications = 0;
+        final router = _router(
+          providers: [_config('beta')],
+          adapters: {
+            'beta': (config, messages) {
+              return Stream<AdapterChunk>.fromIterable(const <AdapterChunk>[
+                AdapterText('one'),
+                AdapterText(' two'),
+              ]);
+            },
           },
-        },
-      );
-      router.addListener(() => notifications++);
+        );
+        router.addListener(() => notifications++);
 
-      expect(await router.sendMessageStream('hi').join(), 'one two');
+        expect(await router.sendMessageStream('hi').join(), 'one two');
 
-      expect(notifications, 2);
-      expect(router.history, hasLength(2));
-      expect(router.history.first.origin.isUser, isTrue);
-      expect(router.history.first.text, 'hi');
-      expect(router.history.last.origin.isLlm, isTrue);
-      expect(router.history.last.text, 'one two');
-    });
+        expect(notifications, 2);
+        expect(router.history, hasLength(2));
+        expect(router.history.first.origin.isUser, isTrue);
+        expect(router.history.first.text, 'hi');
+        expect(router.history.last.origin.isLlm, isTrue);
+        expect(router.history.last.text, 'one two');
+      },
+    );
 
-    test('a failed send still keeps the user turn and the partial reply',
-        () async {
-      var notifications = 0;
-      final router = _router(
-        providers: [_config('alpha')],
-        adapters: {
-          'alpha': (config, messages) async* {
-            yield const AdapterText('Hel');
-            throw const TerminalLlmException('bad request', statusCode: 400);
+    test(
+      'a failed send still keeps the user turn and the partial reply',
+      () async {
+        var notifications = 0;
+        final router = _router(
+          providers: [_config('alpha')],
+          adapters: {
+            'alpha': (config, messages) async* {
+              yield const AdapterText('Hel');
+              throw const TerminalLlmException('bad request', statusCode: 400);
+            },
           },
-        },
-      );
-      router.addListener(() => notifications++);
+        );
+        router.addListener(() => notifications++);
 
-      await expectLater(
-        router.sendMessageStream('hi').toList(),
-        throwsA(isA<TerminalLlmException>()),
-      );
+        await expectLater(
+          router.sendMessageStream('hi').toList(),
+          throwsA(isA<TerminalLlmException>()),
+        );
 
-      expect(notifications, 2);
-      expect(router.history, hasLength(2));
-      expect(router.history.first.text, 'hi');
-      expect(router.history.last.text, 'Hel');
-      expect(router.costTracker.totalCost, 0);
-    });
+        expect(notifications, 2);
+        expect(router.history, hasLength(2));
+        expect(router.history.first.text, 'hi');
+        expect(router.history.last.text, 'Hel');
+        expect(router.costTracker.totalCost, 0);
+      },
+    );
 
-    test('blank turns are omitted and attachments are sent as notes', () async {
+    test('blank turns are omitted and attachments travel with turns', () async {
       final seen = <List<ChatTurn>>[];
       final link = LinkAttachment(
         name: 'docs',
@@ -536,23 +550,32 @@ void main() {
         },
       );
 
-      await router.sendMessageStream(
-        '   ',
-        attachments: <Attachment>[
-          FileAttachment(
-            name: 'a.txt',
-            mimeType: 'text/plain',
-            bytes: Uint8List.fromList(<int>[9]),
-          ),
-        ],
-      ).drain<void>();
+      await router
+          .sendMessageStream(
+            '   ',
+            attachments: <Attachment>[
+              FileAttachment(
+                name: 'a.txt',
+                mimeType: 'text/plain',
+                bytes: Uint8List.fromList(<int>[9]),
+              ),
+            ],
+          )
+          .drain<void>();
 
       expect(
-        seen.single.map((turn) => '${turn.role.name}:${turn.text}').toList(),
-        <String>[
-          'assistant:${link.toString()}',
-          'user:FileAttachment(name: a.txt, mimeType: text/plain, bytes: 1 bytes)',
-        ],
+        seen.single
+            .map(
+              (turn) =>
+                  '${turn.role.name}:${turn.text}:'
+                  '${turn.attachments.map((a) => '${a.kind.name}=${a.name}').join(',')}',
+            )
+            .toList(),
+        <String>['assistant::text=docs', 'user::text=a.txt'],
+      );
+      expect(
+        (seen.single.first.attachments.single as LinkTurnAttachment).url,
+        link.url,
       );
     });
 
@@ -592,10 +615,10 @@ void main() {
       ];
 
       expect(notifications, 1);
-      expect(
-        router.history.map((message) => message.text).toList(),
-        <String?>['replaced', 'ok'],
-      );
+      expect(router.history.map((message) => message.text).toList(), <String?>[
+        'replaced',
+        'ok',
+      ]);
     });
   });
 
@@ -603,7 +626,7 @@ void main() {
     test('providers must be non-empty and stay unmodifiable', () {
       expect(
         () => RouterLlmProvider(providers: const <ProviderConfig>[]),
-        throwsA(isA<AssertionError>()),
+        throwsArgumentError,
       );
 
       final router = _router(providers: [_config('beta')]);
@@ -727,10 +750,7 @@ void main() {
 
       expect(await router.generateStream('ping').join(), 'pong');
       expect(checker.calls, 1);
-      expect(
-        router.lastAttemptLogs.map((log) => log.isSuccess),
-        [false, true],
-      );
+      expect(router.lastAttemptLogs.map((log) => log.isSuccess), [false, true]);
     });
 
     test('treats a timeout as a connection failure', () async {
@@ -740,11 +760,11 @@ void main() {
         connectivity: checker,
         adapters: {
           'alpha': (config, messages) => Stream<AdapterChunk>.error(
-                RetryableLlmException(
-                  'timed out',
-                  cause: TimeoutException('no headers'),
-                ),
-              ),
+            RetryableLlmException(
+              'timed out',
+              cause: TimeoutException('no headers'),
+            ),
+          ),
           'beta': (config, messages) =>
               Stream<AdapterChunk>.value(const AdapterText('pong')),
         },
@@ -764,11 +784,11 @@ void main() {
         connectivity: checker,
         adapters: {
           'alpha': (config, messages) => Stream<AdapterChunk>.error(
-                const RetryableLlmException('rate limited', statusCode: 429),
-              ),
+            const RetryableLlmException('rate limited', statusCode: 429),
+          ),
           'beta': (config, messages) => Stream<AdapterChunk>.error(
-                const RetryableLlmException('unavailable', statusCode: 503),
-              ),
+            const RetryableLlmException('unavailable', statusCode: 503),
+          ),
           'gamma': (config, messages) =>
               Stream<AdapterChunk>.value(const AdapterText('pong')),
         },
@@ -858,10 +878,11 @@ ProviderConfig _config(
   );
 }
 
-typedef _Handler = Stream<AdapterChunk> Function(
-  ProviderConfig config,
-  List<ChatTurn> messages,
-);
+typedef _Handler =
+    Stream<AdapterChunk> Function(
+      ProviderConfig config,
+      List<ChatTurn> messages,
+    );
 
 RouterLlmProvider _router({
   required List<ProviderConfig> providers,

@@ -47,7 +47,10 @@ void main() {
       addTearDown(client.close);
       final probeUrl = Uri.parse('https://example.com/ping');
 
-      final checker = HttpConnectivityChecker(probeUrl: probeUrl, client: client);
+      final checker = HttpConnectivityChecker(
+        probeUrl: probeUrl,
+        client: client,
+      );
 
       expect(await checker.hasInternet(), isTrue);
       expect(requests, [probeUrl]);
@@ -64,10 +67,8 @@ void main() {
       expect(await checker.hasInternet(), isFalse);
     });
 
-    test('reports offline when no response arrives in time', () async {
-      final client = MockClient(
-        (request) => Completer<http.Response>().future,
-      );
+    test('treats no response in time as inconclusive, so online', () async {
+      final client = MockClient((request) => Completer<http.Response>().future);
       addTearDown(client.close);
 
       final checker = HttpConnectivityChecker(
@@ -75,7 +76,7 @@ void main() {
         timeout: const Duration(milliseconds: 20),
       );
 
-      expect(await checker.hasInternet(), isFalse);
+      expect(await checker.hasInternet(), isTrue);
     });
   });
 }

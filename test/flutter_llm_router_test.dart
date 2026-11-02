@@ -27,7 +27,9 @@ void main() {
       log.toString(),
       'AttemptLog(providerName: openai, model: gpt-4o-mini, '
       'timestamp: ${timestamp.toIso8601String()}, latencyMs: 842, '
-      'isSuccess: false, error: timeout, statusCode: 504)',
+      'isSuccess: false, error: timeout, statusCode: 504, '
+      'finishReason: null, timeToFirstTokenMs: null, retry: 0, '
+      'skipReason: null, fromCache: false)',
     );
   });
 

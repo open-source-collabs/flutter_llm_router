@@ -45,19 +45,13 @@ void main() {
 
   test('recordUsage rejects negative token counts without mutating state', () {
     expect(
-      () => tracker.recordUsage(
-        config: config,
-        inputTokens: -1,
-        outputTokens: 0,
-      ),
+      () =>
+          tracker.recordUsage(config: config, inputTokens: -1, outputTokens: 0),
       throwsA(isA<AssertionError>()),
     );
     expect(
-      () => tracker.recordUsage(
-        config: config,
-        inputTokens: 0,
-        outputTokens: -5,
-      ),
+      () =>
+          tracker.recordUsage(config: config, inputTokens: 0, outputTokens: -5),
       throwsA(isA<AssertionError>()),
     );
 
@@ -91,8 +85,9 @@ void main() {
 
   test('a zero-cost update does not notify, but token counters still move', () {
     final observed = <double>[];
-    tracker.totalCostNotifier
-        .addListener(() => observed.add(tracker.totalCost));
+    tracker.totalCostNotifier.addListener(
+      () => observed.add(tracker.totalCost),
+    );
 
     const free = ProviderConfig(
       name: 'openai',
@@ -114,8 +109,9 @@ void main() {
 
   test('reset notifies only when the total actually changes', () {
     final observed = <double>[];
-    tracker.totalCostNotifier
-        .addListener(() => observed.add(tracker.totalCost));
+    tracker.totalCostNotifier.addListener(
+      () => observed.add(tracker.totalCost),
+    );
 
     tracker.reset();
     expect(observed, isEmpty);
@@ -150,10 +146,7 @@ void main() {
 
     expect(tracker.totalInputTokens, 4);
     expect(tracker.totalOutputTokens, 2);
-    expect(
-      tracker.totalCost,
-      closeTo(1 + 4 * 0.000001 + 2 * 0.000002, 1e-12),
-    );
+    expect(tracker.totalCost, closeTo(1 + 4 * 0.000001 + 2 * 0.000002, 1e-12));
   });
 
   test('dispose rejects later reads and writes', () {
@@ -165,11 +158,8 @@ void main() {
     expect(() => disposed.recordCost(1), throwsFlutterError);
     expect(() => disposed.reset(), throwsFlutterError);
     expect(
-      () => disposed.recordUsage(
-        config: config,
-        inputTokens: 1,
-        outputTokens: 1,
-      ),
+      () =>
+          disposed.recordUsage(config: config, inputTokens: 1, outputTokens: 1),
       throwsFlutterError,
     );
   });
