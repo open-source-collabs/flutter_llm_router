@@ -640,6 +640,7 @@ void main() {
       final router = _router(providers: [_config('beta')]);
 
       expect(
+        // ignore: deprecated_member_use_from_same_package
         () => router.getDocumentEmbedding('abcdef'),
         throwsA(
           isA<UnimplementedError>().having(
@@ -650,6 +651,7 @@ void main() {
         ),
       );
       expect(
+        // ignore: deprecated_member_use_from_same_package
         () => router.getQueryEmbedding(''),
         throwsA(
           isA<UnimplementedError>().having(
