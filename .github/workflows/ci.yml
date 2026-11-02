@@ -28,6 +28,12 @@ jobs:
           channel: ${{ matrix.channel }}
           flutter-version: ${{ matrix.version }}
           cache: true
+      # firebase_ai 3.12+ uses @internal, which Flutter 3.32's foundation
+      # library does not export, so the minimum job pins the last good release.
+      - name: Pin firebase_ai for the minimum Flutter
+        if: matrix.flutter == 'minimum'
+        run: |
+          printf 'dependency_overrides:\n  firebase_ai: 3.11.0\n' > pubspec_overrides.yaml
       - run: flutter pub get
       - name: Check formatting
         if: matrix.flutter == 'stable'
