@@ -23,6 +23,7 @@ import 'models/response_schema.dart';
 import 'models/tool.dart';
 import 'models/turn_attachment.dart';
 import 'routing/budget_policy.dart';
+import 'routing/key_pool.dart';
 import 'routing/provider_health.dart';
 import 'routing/response_cache.dart';
 import 'routing/retry_policy.dart';
@@ -49,7 +50,9 @@ import 'tracking/cost_tracker.dart';
 /// 3. A provider is skipped when it cannot take the conversation's
 ///    attachments (see [ProviderCapabilities]), when [budget] blocks it, or
 ///    when its circuit is open under [circuitBreaker].
-/// 4. A transient failure is retried on the same provider under
+/// 4. A provider with several [ProviderConfig.apiKeys] moves to its next key
+///    when a key is rate limited or rejected, as set by [keyPool].
+/// 5. A transient failure is retried on the same provider under
 ///    [retryPolicy] before failing over. The default does not retry.
 ///
 /// When a provider fails with a connection error or timeout, the router asks
@@ -105,6 +108,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     this.routingStrategy = const PriorityRoutingStrategy(),
     this.budget,
     this.responseCache,
+    this.keyPool = const KeyPoolPolicy(),
     this.redactEventErrors = true,
     List<RouterTool> tools = const <RouterTool>[],
     this.maxToolRounds = 8,
@@ -163,6 +167,10 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
   /// Answers repeated requests without a provider call, or null for none.
   final ResponseCache? responseCache;
 
+  /// How providers with several [ProviderConfig.apiKeys] rotate and bench
+  /// keys. Providers with a single key ignore it.
+  final KeyPoolPolicy keyPool;
+
   /// Whether [events] leave provider response text out of error messages.
   ///
   /// Defaults to true, because error bodies can echo the prompt. Event logs
@@ -196,6 +204,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
   final StreamController<RouterEvent> _events =
       StreamController<RouterEvent>.broadcast();
   late final ProviderHealthRegistry _health;
+  late final KeyPoolRegistry _keys = KeyPoolRegistry(keyPool);
   final Set<_RouteRequest> _activeRequests = <_RouteRequest>{};
   final Set<ChatMessage> _unsentMessages = Set<ChatMessage>.identity();
   int _requestCount = 0;
@@ -516,6 +525,18 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
         _skip(request, logs, config, budgetReason);
         continue;
       }
+      final keyOrder = _keys.order(config, DateTime.now());
+      if (keyOrder.isEmpty) {
+        final until = _keys.nextAvailable(config);
+        _skip(
+          request,
+          logs,
+          config,
+          'All ${config.allKeys.length} API keys are cooling down until '
+          '${until?.toIso8601String() ?? 'later'}',
+        );
+        continue;
+      }
       _eventRequestId = request.id;
       if (!ignoreCircuits && !_health.tryAcquire(config, DateTime.now())) {
         final until = _health.snapshot[config.id]?.openUntil;
@@ -532,10 +553,18 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
       final effective = config.copyWith(
         settings: _effectiveSettings(config.settings, requestSettings),
       );
+      final keys = config.allKeys;
+      final pooled = keys.length > 1;
+      var keyPosition = 0;
       var conversation = messages;
       var round = 0;
       late _Attempt attempt;
       for (var retry = 0; ; retry++) {
+        final keyIndex = keyOrder[keyPosition];
+        final attemptConfig = pooled
+            ? effective.copyWith(apiKey: keys[keyIndex])
+            : effective;
+        final loggedKey = pooled ? keyIndex : null;
         _emit(
           AttemptStarted(
             request.id,
@@ -546,7 +575,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
         );
         attempt = await _attempt(
           config,
-          effective,
+          attemptConfig,
           conversation,
           request,
           output,
@@ -564,6 +593,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
               attempt,
               retry: retry,
               error: 'Cancelled by the caller',
+              keyIndex: loggedKey,
             ),
           );
           return;
@@ -575,7 +605,11 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
             config,
             timeToFirstTokenMs: attempt.timeToFirstTokenMs,
           );
-          _addLog(request, logs, _log(config, attempt, retry: retry));
+          _addLog(
+            request,
+            logs,
+            _log(config, attempt, retry: retry, keyIndex: loggedKey),
+          );
           if (round >= maxToolRounds) {
             throw TerminalLlmException(
               'Stopped after $maxToolRounds tool rounds without a final reply',
@@ -606,7 +640,11 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
             config,
             timeToFirstTokenMs: attempt.timeToFirstTokenMs,
           );
-          _addLog(request, logs, _log(config, attempt, retry: retry));
+          _addLog(
+            request,
+            logs,
+            _log(config, attempt, retry: retry, keyIndex: loggedKey),
+          );
           if (cache != null && cacheKey != null) {
             _writeCache(
               cache,
@@ -625,7 +663,13 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
         _addLog(
           request,
           logs,
-          _log(config, attempt, retry: retry, failure: failure),
+          _log(
+            config,
+            attempt,
+            retry: retry,
+            failure: failure,
+            keyIndex: loggedKey,
+          ),
           failure.redactedMessage,
         );
 
@@ -637,6 +681,14 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
           // This attempt's text is already shown; a retry would repeat it.
           _health.recordRequestFailure(config, DateTime.now());
           Error.throwWithStackTrace(failure, attempt.trace ?? StackTrace.empty);
+        }
+        if (_keys.recordFailure(config, keyIndex, failure, DateTime.now()) &&
+            keyPosition + 1 < keyOrder.length) {
+          // This key is rate limited or rejected; the same provider may
+          // still answer with its next key.
+          keyPosition++;
+          retry = -1;
+          continue;
         }
         if (!confirmedOnline &&
             !_isLocalProvider(config) &&
@@ -1034,6 +1086,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
     required int retry,
     LlmRouterException? failure,
     String? error,
+    int? keyIndex,
   }) {
     return AttemptLog(
       providerName: config.name,
@@ -1046,6 +1099,7 @@ class RouterLlmProvider extends LlmProvider with ChangeNotifier {
       finishReason: attempt.finishReason,
       timeToFirstTokenMs: attempt.timeToFirstTokenMs,
       retry: retry,
+      keyIndex: keyIndex,
     );
   }
 
@@ -1241,6 +1295,7 @@ AttemptLog _withError(AttemptLog log, String? error) {
     retry: log.retry,
     skipReason: log.skipReason,
     fromCache: log.fromCache,
+    keyIndex: log.keyIndex,
   );
 }
 

@@ -21,6 +21,7 @@ class AttemptLog {
     this.retry = 0,
     this.skipReason,
     this.fromCache = false,
+    this.keyIndex,
   });
 
   /// `ProviderConfig.name` of the upstream that was called.
@@ -71,6 +72,10 @@ class AttemptLog {
   /// Whether the reply came from a `ResponseCache` instead of a provider.
   final bool fromCache;
 
+  /// Position of the API key used, in `ProviderConfig.allKeys`, or null when
+  /// the provider has a single key. The key itself is never logged.
+  final int? keyIndex;
+
   /// Whether the router skipped this provider. See [skipReason].
   bool get isSkipped => skipReason != null;
 
@@ -81,6 +86,7 @@ class AttemptLog {
         'isSuccess: $isSuccess, error: $error, statusCode: $statusCode, '
         'finishReason: ${finishReason?.name}, '
         'timeToFirstTokenMs: $timeToFirstTokenMs, retry: $retry, '
-        'skipReason: $skipReason, fromCache: $fromCache)';
+        'skipReason: $skipReason, fromCache: $fromCache'
+        '${keyIndex == null ? '' : ', keyIndex: $keyIndex'})';
   }
 }

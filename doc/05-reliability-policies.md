@@ -7,7 +7,7 @@ For each request the router:
 1. Asks `responseCache`, when set, for a stored reply.
 2. Orders `providers` with `routingStrategy`.
 3. For each provider, skips it if it can't take the attachments, if `budget` blocks it, or if its circuit is open. Each skip is logged with a `skipReason`.
-4. Calls the provider, retrying transient failures under `retryPolicy`, then fails over.
+4. Calls the provider, retrying transient failures under `retryPolicy`, then fails over. A provider with several keys moves to its next key first (see [API key pools](#api-key-pools)).
 
 ## Retry
 
@@ -100,6 +100,35 @@ Weights are keyed by `ProviderConfig.id` or `ProviderConfig.name`, with the id w
 Latency comes from `ProviderHealth.averageTimeToFirstTokenMs`, an exponentially weighted average over successful attempts.
 
 Write your own by extending `RoutingStrategy` and returning the providers in the order to try. Returning a subset leaves the rest out of that request.
+
+## API key pools
+
+When a task can't move to another provider, such as image generation, give that provider several keys:
+
+```dart
+ProviderConfig(
+  name: 'openai',
+  apiKey: keyA,
+  apiKeys: [keyB, keyC],
+  model: 'gpt-4o-mini',
+  pricePerInputToken: 0.00000015,
+  pricePerOutputToken: 0.0000006,
+)
+```
+
+`ProviderConfig.allKeys` is `apiKey` followed by `apiKeys`, without duplicates or blanks. `RouterLlmProvider.keyPool` takes a `KeyPoolPolicy`:
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `rotation` | `KeyRotation.roundRobin` | `roundRobin` starts each request on the next key. `priority` always starts on the first key and moves on only when a key is resting. |
+| `rateLimitCooldown` | 60 seconds | How long a key rests after HTTP 429 without a `Retry-After`. |
+| `invalidKeyCooldown` | 10 minutes | How long a key rests after HTTP 401, 402, or 403. |
+
+When a call fails because of its key (429, 401, 402, 403), the key rests and the same request retries the same provider with the next available key, without waiting. Failures that are not the key's fault, such as 503, timeouts, and 400, do not rotate keys; `retryPolicy` and failover handle them as usual. When every key of a provider is resting, the provider is skipped with a `skipReason` and the next provider is tried.
+
+Each attempt's `AttemptLog.keyIndex` is the key's position in `allKeys`. The key itself is never logged. A provider with a single key ignores the policy.
+
+Key state is kept in memory per router, so it resets when the app restarts. Many providers limit per organization, so keys from separate accounts or projects add the most capacity.
 
 ## Budgets
 

@@ -110,6 +110,7 @@ This part adds production reliability controls: same-provider retries, a circuit
 - `RouterInspector`, a widget that shows spend, provider health, and the attempts of the latest request live.
 - `ResponseCache`, `InMemoryResponseCache`, `CachedResponse`, and `RouterLlmProvider.responseCache`. Only complete, successful replies are stored. Cache errors never fail a request.
 - `AttemptLog.timeToFirstTokenMs`, `retry`, `skipReason`, `isSkipped`, and `fromCache`. Skipped providers and cache hits now appear in `lastAttemptLogs`.
+- API key pools. `ProviderConfig.apiKeys` adds keys to `apiKey` (`ProviderConfig.allKeys` lists them all), and `KeyPoolPolicy` with `RouterLlmProvider.keyPool` sets `KeyRotation.roundRobin` (default) or `KeyRotation.priority`. A key that fails with HTTP 429 rests for its `Retry-After`, or `rateLimitCooldown` (60 seconds); a key that fails with 401, 402, or 403 rests for `invalidKeyCooldown` (10 minutes). The router retries the same provider with the next key before it fails over, which matters when no other provider can do the job, such as image generation. When every key of a provider is resting, the provider is skipped with a `skipReason`. `AttemptLog.keyIndex` shows which key an attempt used; the key itself is never logged. A provider with a single key behaves as before.
 
 ### Tools and structured output
 

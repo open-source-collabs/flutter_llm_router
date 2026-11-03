@@ -23,6 +23,7 @@ A resilient multi-provider LLM router for Flutter AI Toolkit. `RouterLlmProvider
 - **Tool Calling**: Give the model Dart functions to call. The router runs them, sends the results back, and streams the final reply.
 - **Structured Output**: `generateObject` returns a reply decoded against a JSON Schema, and fails over when a provider returns invalid JSON.
 - **Reliability Policies** (opt-in): Same-provider retries with backoff and `Retry-After`, a circuit breaker, and routing strategies (priority, cheapest, lowest latency, weighted).
+- **API Key Pooling** (opt-in): Give a provider several keys. The router rotates them and moves to the next key when one is rate limited or rejected, before it fails over to another provider.
 - **Budgets** (opt-in): Per-provider and per-session spending limits.
 - **Live Token & Cost Tracking**: Configurable USD token pricing, cached-token pricing, and a per-provider breakdown with real-time `ValueNotifier` updates.
 - **Observability**: Attempt logs (`lastAttemptLogs`), an `events` stream for logging and tracing with error redaction, and a `RouterInspector` debug widget.
@@ -322,6 +323,28 @@ final router = RouterLlmProvider(
 ```
 
 Other strategies: `PriorityRoutingStrategy` (default), `LowestLatencyRoutingStrategy`, and `WeightedRoutingStrategy`. `router.providerHealth` shows each provider's circuit state and average time to first token. See [Reliability policies](doc/05-reliability-policies.md).
+
+## API Key Pooling
+
+Some work can't move to another provider, so spread it across several keys of the same one:
+
+```dart
+final router = RouterLlmProvider(
+  providers: [
+    ProviderConfig(
+      name: 'openai',
+      apiKey: keyA,
+      apiKeys: [keyB, keyC],
+      model: 'gpt-4o-mini',
+      pricePerInputToken: 0.00000015,
+      pricePerOutputToken: 0.0000006,
+    ),
+  ],
+  keyPool: const KeyPoolPolicy(rotation: KeyRotation.roundRobin),
+);
+```
+
+A key that returns 429 rests for its `Retry-After` (or 60 seconds), and one that returns 401, 402, or 403 rests for 10 minutes. The same request moves on to the next key right away. Only when every key is resting does the router skip the provider and fail over. `AttemptLog.keyIndex` shows which key was used; keys are never logged. Keys from separate accounts or projects help most, because many providers limit per organization. See [Reliability policies](doc/05-reliability-policies.md#api-key-pools).
 
 ## Budgets
 

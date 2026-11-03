@@ -26,6 +26,7 @@ class ProviderConfig {
     required this.model,
     required this.pricePerInputToken,
     required this.pricePerOutputToken,
+    this.apiKeys = const <String>[],
     this.pricePerCachedInputToken,
     this.baseUrl,
     this.adapter,
@@ -211,6 +212,20 @@ class ProviderConfig {
   /// Callers own how this value is stored. The router does not print it.
   final String apiKey;
 
+  /// Further credentials for the same provider, pooled with [apiKey].
+  ///
+  /// Empty by default. With more than one key, the router rotates them (see
+  /// `KeyPoolPolicy`) and moves to the next key when one is rate limited or
+  /// rejected, before it fails over to another provider. Use it when the
+  /// provider cannot be swapped, such as for image generation.
+  final List<String> apiKeys;
+
+  /// [apiKey] followed by [apiKeys], without duplicates or blanks.
+  List<String> get allKeys => <String>{
+    apiKey,
+    ...apiKeys.where((key) => key.isNotEmpty),
+  }.toList(growable: false);
+
   /// Upstream model id, for example `gpt-4o-mini` or `gemini-2.0-flash`.
   final String model;
 
@@ -319,6 +334,7 @@ class ProviderConfig {
     String? model,
     double? pricePerInputToken,
     double? pricePerOutputToken,
+    List<String>? apiKeys,
     Object? pricePerCachedInputToken = _unset,
     Object? baseUrl = _unset,
     Object? adapter = _unset,
@@ -337,6 +353,7 @@ class ProviderConfig {
       model: model ?? this.model,
       pricePerInputToken: pricePerInputToken ?? this.pricePerInputToken,
       pricePerOutputToken: pricePerOutputToken ?? this.pricePerOutputToken,
+      apiKeys: apiKeys ?? this.apiKeys,
       pricePerCachedInputToken: identical(pricePerCachedInputToken, _unset)
           ? this.pricePerCachedInputToken
           : pricePerCachedInputToken as double?,

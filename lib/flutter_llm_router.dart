@@ -7,8 +7,8 @@
 /// `LlmRouterException` and its subclasses classify retryable and terminal
 /// provider failures. `RouterLlmProvider` fails over across that chain.
 /// `RetryPolicy`, `CircuitBreakerPolicy`, `RoutingStrategy`, `BudgetPolicy`,
-/// and `ResponseCache` tune it, `RouterEvent` reports what it does, and
-/// `RouterInspector` shows it live.
+/// `KeyPoolPolicy`, and `ResponseCache` tune it, `RouterEvent` reports what it
+/// does, and `RouterInspector` shows it live.
 library;
 
 export 'src/adapters/anthropic_adapter.dart';
@@ -31,6 +31,7 @@ export 'src/models/tool.dart';
 export 'src/models/turn_attachment.dart';
 export 'src/router_llm_provider.dart';
 export 'src/routing/budget_policy.dart';
+export 'src/routing/key_pool.dart' show KeyPoolPolicy, KeyRotation;
 export 'src/routing/provider_health.dart'
     show CircuitBreakerPolicy, CircuitState, ProviderHealth;
 export 'src/routing/response_cache.dart';
