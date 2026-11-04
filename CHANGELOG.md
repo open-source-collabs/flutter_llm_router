@@ -142,6 +142,10 @@ This part adds tool calling and structured output. Both are opt-in. Read **Chang
 - `generateObject` buffers the reply and emits it only after it validates, so an invalid reply can still fail over.
 - The response cache key now includes the tools and the schema. Cached `generateStream` replies don't answer `generateObject`, and the reverse.
 
+#### Fixed
+
+- The package is now WASM-compatible on pub.dev. It imports only the `flutter_ai_toolkit` provider interfaces, not the toolkit's public barrel. The barrel also exports `FirebaseProvider`, which reaches `dart:io` through `firebase_ai` and `web_socket_channel`.
+
 ## [1.1.0] - 2026-10-17
 
 - Added connectivity-aware failover. When a provider fails with a connection error or timeout, `RouterLlmProvider` silently probes the internet once per request. If the device is offline, it throws the new `NoInternetConnectionException` instead of trying every provider. If the device is online, it fails over as before.
