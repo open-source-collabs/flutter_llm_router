@@ -61,8 +61,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y webp
       - run: flutter pub get
       - run: dart pub publish --dry-run
-      # Up to 10 points are lost to WASM compatibility, which comes from
-      # firebase_ai through flutter_ai_toolkit.
+      # Fail if more than 10 pub points are lost.
       - name: Check pub points
         run: |
           dart pub global activate pana

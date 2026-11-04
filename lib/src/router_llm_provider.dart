@@ -2,7 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_ai_toolkit/flutter_ai_toolkit.dart';
+// The toolkit's public barrel also exports FirebaseProvider, which reaches
+// dart:io through firebase_ai and web_socket_channel. Importing it would make
+// this package WASM-incompatible, so import only the provider interfaces.
+// ignore_for_file: implementation_imports
+import 'package:flutter_ai_toolkit/src/providers/interface/attachments.dart';
+import 'package:flutter_ai_toolkit/src/providers/interface/chat_message.dart';
+import 'package:flutter_ai_toolkit/src/providers/interface/llm_provider.dart';
 
 import 'adapters/anthropic_adapter.dart';
 import 'adapters/azure_openai_adapter.dart';
