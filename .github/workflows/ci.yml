@@ -22,7 +22,7 @@ jobs:
             channel: stable
             version: 3.32.0
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: ${{ matrix.channel }}
@@ -53,7 +53,7 @@ jobs:
     name: Package checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -85,7 +85,7 @@ jobs:
       run:
         working-directory: example
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
