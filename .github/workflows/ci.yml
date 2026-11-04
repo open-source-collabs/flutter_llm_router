@@ -43,7 +43,7 @@ jobs:
       - name: Test on web
         if: matrix.flutter == 'stable'
         run: flutter test --platform chrome
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.flutter == 'stable'
         with:
           name: coverage
