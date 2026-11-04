@@ -1,0 +1,51 @@
+name: Contract tests
+
+# Live calls to OpenAI, Anthropic, and Gemini, to catch API drift and retired
+# models before users do. Each vendor's tests skip when its secret is unset.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+    inputs:
+      openai_model:
+        description: OpenAI model override
+        required: false
+      anthropic_model:
+        description: Anthropic model override
+        required: false
+      gemini_model:
+        description: Gemini model override
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Live vendors
+    runs-on: ubuntu-latest
+    # Forks have no secrets; skip there instead of reporting skips as passes.
+    if: github.repository == 'open-source-collabs/flutter_llm_router'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Run contract tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_MODEL: ${{ inputs.openai_model || 'gpt-4o-mini' }}
+          ANTHROPIC_MODEL: ${{ inputs.anthropic_model || 'claude-haiku-4-5' }}
+          GEMINI_MODEL: ${{ inputs.gemini_model || 'gemini-2.5-flash' }}
+        run: >-
+          flutter test test/contract --tags contract
+          --dart-define=OPENAI_API_KEY="$OPENAI_API_KEY"
+          --dart-define=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+          --dart-define=GEMINI_API_KEY="$GEMINI_API_KEY"
+          --dart-define=OPENAI_MODEL="$OPENAI_MODEL"
+          --dart-define=ANTHROPIC_MODEL="$ANTHROPIC_MODEL"
+          --dart-define=GEMINI_MODEL="$GEMINI_MODEL"

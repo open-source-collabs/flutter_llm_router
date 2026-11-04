@@ -16,7 +16,6 @@ void main() {
     await tester.tap(find.byIcon(Icons.receipt_long));
     await tester.pumpAndSettle();
 
-    expect(find.text('Attempt logs'), findsOneWidget);
-    expect(find.textContaining('No attempts yet'), findsOneWidget);
+    expect(find.text('No requests yet.'), findsOneWidget);
   });
 }

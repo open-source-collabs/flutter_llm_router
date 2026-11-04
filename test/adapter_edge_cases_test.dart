@@ -14,8 +14,8 @@ void main() {
       await _expectStatus<RetryableLlmException>(599, 'edge');
     });
 
-    test('404, 418, and 301 stop the chain', () async {
-      await _expectStatus<TerminalLlmException>(404, 'missing');
+    test('404 skips the provider; 418 and 301 stop the chain', () async {
+      await _expectStatus<ProviderUnavailableLlmException>(404, 'missing');
       await _expectStatus<TerminalLlmException>(418, 'teapot');
       await _expectStatus<TerminalLlmException>(301, 'moved');
     });
@@ -27,7 +27,7 @@ void main() {
       await expectLater(
         _openAi(client).toList(),
         throwsA(
-          isA<TerminalLlmException>().having(
+          isA<ProviderUnavailableLlmException>().having(
             (error) => error.message,
             'message',
             'HTTP 401',
@@ -79,9 +79,10 @@ void main() {
   });
 
   group('SSE framing', () {
-    test('skips comments, blanks, event names, and the DONE sentinel',
-        () async {
-      const body = '''
+    test(
+      'skips comments, blanks, event names, and the DONE sentinel',
+      () async {
+        const body = '''
 : keep-alive
 
 event: ping
@@ -90,11 +91,12 @@ data: [DONE]
 data:{"choices":[{"delta":{"content":"Yo"}}]}
 
 ''';
-      final client = _sse(body);
-      addTearDown(client.close);
+        final client = _sse(body);
+        addTearDown(client.close);
 
-      expect(await _openAi(client).text(), 'Yo');
-    });
+        expect(await _openAi(client).text(), 'Yo');
+      },
+    );
 
     test('a 200 body that is not SSE yields no text', () async {
       final client = MockClient(
@@ -144,29 +146,31 @@ data:{"choices":[{"delta":{"content":"Yo"}}]}
       expect(text, <String>['Hi']);
     });
 
-    test('a socket drop after text keeps the status and the fragment',
-        () async {
-      final client = MockClient.streaming((request, bodyStream) async {
-        await bodyStream.drain<void>();
-        return http.StreamedResponse(_textThenReset(), 200);
-      });
-      addTearDown(client.close);
+    test(
+      'a socket drop after text keeps the status and the fragment',
+      () async {
+        final client = MockClient.streaming((request, bodyStream) async {
+          await bodyStream.drain<void>();
+          return http.StreamedResponse(_textThenReset(), 200);
+        });
+        addTearDown(client.close);
 
-      final text = <String>[];
-      await expectLater(
-        _collectText(_openAi(client), text),
-        throwsA(
-          isA<RetryableLlmException>()
-              .having((error) => error.statusCode, 'statusCode', 200)
-              .having(
-                (error) => error.cause,
-                'cause',
-                isA<http.ClientException>(),
-              ),
-        ),
-      );
-      expect(text, <String>['Hi']);
-    });
+        final text = <String>[];
+        await expectLater(
+          _collectText(_openAi(client), text),
+          throwsA(
+            isA<RetryableLlmException>()
+                .having((error) => error.statusCode, 'statusCode', 200)
+                .having(
+                  (error) => error.cause,
+                  'cause',
+                  isA<http.ClientException>(),
+                ),
+          ),
+        );
+        expect(text, <String>['Hi']);
+      },
+    );
 
     test('CRLF framed events still parse', () async {
       final client = _sse(
@@ -209,33 +213,38 @@ data: [DONE]
       expect(usage.last.outputTokens, 1);
     });
 
-    test('sends the configured cap, trailing-slash root, and both roles',
-        () async {
-      final client = MockClient.streaming((request, bodyStream) async {
-        final body = jsonDecode(utf8.decode(await bodyStream.toBytes()))
-            as Map<String, dynamic>;
-        expect(body['max_tokens'], 128);
-        final messages = body['messages']! as List<dynamic>;
-        expect(
-          messages.map((message) => (message as Map)['role']).toList(),
-          <String>['user', 'assistant'],
-        );
-        expect(request.url.path, '/openai/v1/chat/completions');
-        return http.StreamedResponse(Stream<List<int>>.empty(), 200);
-      });
-      addTearDown(client.close);
+    test(
+      'sends the configured cap, trailing-slash root, and both roles',
+      () async {
+        final client = MockClient.streaming((request, bodyStream) async {
+          final body =
+              jsonDecode(utf8.decode(await bodyStream.toBytes()))
+                  as Map<String, dynamic>;
+          expect(body['max_tokens'], 128);
+          final messages = body['messages']! as List<dynamic>;
+          expect(
+            messages.map((message) => (message as Map)['role']).toList(),
+            <String>['user', 'assistant'],
+          );
+          expect(request.url.path, '/openai/v1/chat/completions');
+          return http.StreamedResponse(Stream<List<int>>.empty(), 200);
+        });
+        addTearDown(client.close);
 
-      await OpenAiAdapter(client: client).streamCompletion(
-        config: _config(
-          baseUrl: 'https://example.test/openai/v1/',
-          maxOutputTokens: 128,
-        ),
-        messages: const <ChatTurn>[
-          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-          ChatTurn(role: ChatTurnRole.assistant, text: 'Hello'),
-        ],
-      ).drain<void>();
-    });
+        await OpenAiAdapter(client: client)
+            .streamCompletion(
+              config: _config(
+                baseUrl: 'https://example.test/openai/v1/',
+                maxOutputTokens: 128,
+              ),
+              messages: const <ChatTurn>[
+                ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+                ChatTurn(role: ChatTurnRole.assistant, text: 'Hello'),
+              ],
+            )
+            .drain<void>();
+      },
+    );
   });
 
   group('Anthropic payload edges', () {
@@ -262,15 +271,17 @@ data: {"type":"message_start","message":{"id":"msg_1"}}
       });
       addTearDown(client.close);
 
-      final chunks = await AnthropicAdapter(client: client).streamCompletion(
-        config: _config(
-          model: 'claude-3-5-haiku-latest',
-          baseUrl: 'https://example.test/anthropic/v1',
-        ),
-        messages: const <ChatTurn>[
-          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-        ],
-      ).toList();
+      final chunks = await AnthropicAdapter(client: client)
+          .streamCompletion(
+            config: _config(
+              model: 'claude-3-5-haiku-latest',
+              baseUrl: 'https://example.test/anthropic/v1',
+            ),
+            messages: const <ChatTurn>[
+              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+            ],
+          )
+          .toList();
 
       expect(
         chunks.whereType<AdapterText>().map((chunk) => chunk.text).toList(),
@@ -287,8 +298,9 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
 
 ''';
       final client = MockClient.streaming((request, bodyStream) async {
-        final decoded = jsonDecode(utf8.decode(await bodyStream.toBytes()))
-            as Map<String, dynamic>;
+        final decoded =
+            jsonDecode(utf8.decode(await bodyStream.toBytes()))
+                as Map<String, dynamic>;
         final generation = decoded['generationConfig']! as Map<String, dynamic>;
         expect(generation['maxOutputTokens'], 64);
         expect(
@@ -305,16 +317,18 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
       });
       addTearDown(client.close);
 
-      final chunks = await GeminiAdapter(client: client).streamCompletion(
-        config: _config(
-          model: 'gemini 2.0',
-          baseUrl: 'https://example.test/gemini',
-          maxOutputTokens: 64,
-        ),
-        messages: const <ChatTurn>[
-          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-        ],
-      ).toList();
+      final chunks = await GeminiAdapter(client: client)
+          .streamCompletion(
+            config: _config(
+              model: 'gemini 2.0',
+              baseUrl: 'https://example.test/gemini',
+              maxOutputTokens: 64,
+            ),
+            messages: const <ChatTurn>[
+              ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+            ],
+          )
+          .toList();
 
       expect(
         chunks.whereType<AdapterText>().map((chunk) => chunk.text).join(),
@@ -326,34 +340,36 @@ data: {"candidates":[{"content":{"parts":[{"text":"A"},{"text":""},{"inlineData"
   });
 
   group('OpenRouter payload edges', () {
-    test('keeps an explicit baseUrl instead of the OpenRouter default',
-        () async {
-      final client = MockClient.streaming((request, bodyStream) async {
-        await bodyStream.drain<void>();
-        expect(
-          request.url,
-          Uri.parse('https://proxy.example/api/v1/chat/completions'),
-        );
-        return http.StreamedResponse(Stream<List<int>>.empty(), 200);
-      });
-      addTearDown(client.close);
+    test(
+      'keeps an explicit baseUrl instead of the OpenRouter default',
+      () async {
+        final client = MockClient.streaming((request, bodyStream) async {
+          await bodyStream.drain<void>();
+          expect(
+            request.url,
+            Uri.parse('https://proxy.example/api/v1/chat/completions'),
+          );
+          return http.StreamedResponse(Stream<List<int>>.empty(), 200);
+        });
+        addTearDown(client.close);
 
-      await OpenRouterAdapter(client: client).streamCompletion(
-        config: _config(
-          model: 'openai/gpt-4o-mini',
-          baseUrl: 'https://proxy.example/api/v1/',
-        ),
-        messages: const <ChatTurn>[
-          ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
-        ],
-      ).drain<void>();
-    });
+        await OpenRouterAdapter(client: client)
+            .streamCompletion(
+              config: _config(
+                model: 'openai/gpt-4o-mini',
+                baseUrl: 'https://proxy.example/api/v1/',
+              ),
+              messages: const <ChatTurn>[
+                ChatTurn(role: ChatTurnRole.user, text: 'Hi'),
+              ],
+            )
+            .drain<void>();
+      },
+    );
   });
 }
 
-const _user = <ChatTurn>[
-  ChatTurn(role: ChatTurnRole.user, text: 'Hello'),
-];
+const _user = <ChatTurn>[ChatTurn(role: ChatTurnRole.user, text: 'Hello')];
 
 ProviderConfig _config({
   String model = 'gpt-4o-mini',
@@ -372,10 +388,9 @@ ProviderConfig _config({
 }
 
 Stream<AdapterChunk> _openAi(http.Client client) {
-  return OpenAiAdapter(client: client).streamCompletion(
-    config: _config(),
-    messages: _user,
-  );
+  return OpenAiAdapter(
+    client: client,
+  ).streamCompletion(config: _config(), messages: _user);
 }
 
 MockClient _sse(String body) {
@@ -386,9 +401,7 @@ Future<void> _expectStatus<T extends LlmRouterException>(
   int statusCode,
   String body,
 ) {
-  final client = MockClient(
-    (request) async => http.Response(body, statusCode),
-  );
+  final client = MockClient((request) async => http.Response(body, statusCode));
   addTearDown(client.close);
 
   return expectLater(
@@ -402,7 +415,9 @@ Future<void> _expectStatus<T extends LlmRouterException>(
 }
 
 Future<void> _collectText(
-    Stream<AdapterChunk> chunks, List<String> into) async {
+  Stream<AdapterChunk> chunks,
+  List<String> into,
+) async {
   await for (final chunk in chunks) {
     if (chunk is AdapterText) into.add(chunk.text);
   }

@@ -19,16 +19,13 @@ void main() {
       final router = RouterLlmProvider(
         providers: [_config('alpha'), _config('beta')],
         customAdapters: {
-          'alpha': _ScriptedAdapter(
-            clients[0],
-            (config, messages) {
-              calls.add(config.name);
-              expect(messages.single.text, 'ping');
-              return Stream<AdapterChunk>.error(
-                const RetryableLlmException('rate limited', statusCode: 429),
-              );
-            },
-          ),
+          'alpha': _ScriptedAdapter(clients[0], (config, messages) {
+            calls.add(config.name);
+            expect(messages.single.text, 'ping');
+            return Stream<AdapterChunk>.error(
+              const RetryableLlmException('rate limited', statusCode: 429),
+            );
+          }),
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
             expect(messages.single.text, 'ping');
@@ -52,54 +49,101 @@ void main() {
       expect(router.history, isEmpty);
     });
 
-    test('throws AllProvidersFailedException when every provider fails',
-        () async {
-      final clients = _clients(2);
-      addTearDown(() {
-        for (final client in clients) {
-          client.close();
-        }
-      });
+    test(
+      'throws AllProvidersFailedException when every provider fails',
+      () async {
+        final clients = _clients(2);
+        addTearDown(() {
+          for (final client in clients) {
+            client.close();
+          }
+        });
 
-      final router = RouterLlmProvider(
-        providers: [_config('alpha'), _config('beta')],
-        customAdapters: {
-          'alpha': _ScriptedAdapter(clients[0], (config, messages) {
-            expect(config.name, 'alpha');
-            expect(messages.single.text, 'ping');
-            return Stream<AdapterChunk>.error(
-              const RetryableLlmException('timeout', statusCode: 504),
-            );
-          }),
-          'beta': _ScriptedAdapter(clients[1], (config, messages) {
-            expect(config.name, 'beta');
-            expect(messages.single.text, 'ping');
-            return Stream<AdapterChunk>.error(
-              const RetryableLlmException('unavailable', statusCode: 503),
-            );
-          }),
-        },
-      );
-      addTearDown(router.dispose);
+        final router = RouterLlmProvider(
+          providers: [_config('alpha'), _config('beta')],
+          customAdapters: {
+            'alpha': _ScriptedAdapter(clients[0], (config, messages) {
+              expect(config.name, 'alpha');
+              expect(messages.single.text, 'ping');
+              return Stream<AdapterChunk>.error(
+                const RetryableLlmException('timeout', statusCode: 504),
+              );
+            }),
+            'beta': _ScriptedAdapter(clients[1], (config, messages) {
+              expect(config.name, 'beta');
+              expect(messages.single.text, 'ping');
+              return Stream<AdapterChunk>.error(
+                const RetryableLlmException('unavailable', statusCode: 503),
+              );
+            }),
+          },
+        );
+        addTearDown(router.dispose);
 
-      await expectLater(
-        router.generateStream('ping').toList(),
-        throwsA(
-          isA<AllProvidersFailedException>().having(
-            (error) => error.attempts.map((log) => log.providerName).toList(),
-            'attempts',
-            ['alpha', 'beta'],
+        await expectLater(
+          router.generateStream('ping').toList(),
+          throwsA(
+            isA<AllProvidersFailedException>().having(
+              (error) => error.attempts.map((log) => log.providerName).toList(),
+              'attempts',
+              ['alpha', 'beta'],
+            ),
           ),
-        ),
-      );
-      expect(
-        router.lastAttemptLogs.map((log) => log.error).toList(),
-        ['timeout', 'unavailable'],
-      );
-    });
+        );
+        expect(router.lastAttemptLogs.map((log) => log.error).toList(), [
+          'timeout',
+          'unavailable',
+        ]);
+      },
+    );
 
-    test('rethrows TerminalLlmException without calling the next provider',
-        () async {
+    test(
+      'rethrows TerminalLlmException without calling the next provider',
+      () async {
+        final calls = <String>[];
+        final clients = _clients(2);
+        addTearDown(() {
+          for (final client in clients) {
+            client.close();
+          }
+        });
+
+        final router = RouterLlmProvider(
+          providers: [_config('alpha'), _config('beta')],
+          customAdapters: {
+            'alpha': _ScriptedAdapter(clients[0], (config, messages) {
+              calls.add(config.name);
+              expect(messages, isNotEmpty);
+              return Stream<AdapterChunk>.error(
+                const TerminalLlmException('invalid prompt', statusCode: 400),
+              );
+            }),
+            'beta': _ScriptedAdapter(clients[1], (config, messages) {
+              calls.add(config.name);
+              return Stream<AdapterChunk>.value(
+                const AdapterText('should not run'),
+              );
+            }),
+          },
+        );
+        addTearDown(router.dispose);
+
+        await expectLater(
+          router.generateStream('ping').toList(),
+          throwsA(
+            isA<TerminalLlmException>()
+                .having((error) => error.statusCode, 'statusCode', 400)
+                .having((error) => error.message, 'message', 'invalid prompt'),
+          ),
+        );
+        expect(calls, ['alpha']);
+        expect(router.lastAttemptLogs, hasLength(1));
+        expect(router.lastAttemptLogs.single.isSuccess, isFalse);
+        expect(router.lastAttemptLogs.single.providerName, 'alpha');
+      },
+    );
+
+    test('fails over on HTTP 402', () async {
       final calls = <String>[];
       final clients = _clients(2);
       addTearDown(() {
@@ -113,50 +157,8 @@ void main() {
         customAdapters: {
           'alpha': _ScriptedAdapter(clients[0], (config, messages) {
             calls.add(config.name);
-            expect(messages, isNotEmpty);
             return Stream<AdapterChunk>.error(
-              const TerminalLlmException('invalid prompt', statusCode: 400),
-            );
-          }),
-          'beta': _ScriptedAdapter(clients[1], (config, messages) {
-            calls.add(config.name);
-            return Stream<AdapterChunk>.value(
-                const AdapterText('should not run'));
-          }),
-        },
-      );
-      addTearDown(router.dispose);
-
-      await expectLater(
-        router.generateStream('ping').toList(),
-        throwsA(
-          isA<TerminalLlmException>()
-              .having((error) => error.statusCode, 'statusCode', 400)
-              .having((error) => error.message, 'message', 'invalid prompt'),
-        ),
-      );
-      expect(calls, ['alpha']);
-      expect(router.lastAttemptLogs, hasLength(1));
-      expect(router.lastAttemptLogs.single.isSuccess, isFalse);
-      expect(router.lastAttemptLogs.single.providerName, 'alpha');
-    });
-
-    test('does not fail over on HTTP 402', () async {
-      final calls = <String>[];
-      final clients = _clients(2);
-      addTearDown(() {
-        for (final client in clients) {
-          client.close();
-        }
-      });
-
-      final router = RouterLlmProvider(
-        providers: [_config('alpha'), _config('beta')],
-        customAdapters: {
-          'alpha': _ScriptedAdapter(clients[0], (config, messages) {
-            calls.add(config.name);
-            return Stream<AdapterChunk>.error(
-              const TerminalLlmException(
+              const ProviderUnavailableLlmException(
                 'insufficient credits',
                 statusCode: 402,
               ),
@@ -164,25 +166,15 @@ void main() {
           }),
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
-            return Stream<AdapterChunk>.value(
-                const AdapterText('should not run'));
+            return Stream<AdapterChunk>.value(const AdapterText('pong'));
           }),
         },
       );
       addTearDown(router.dispose);
 
-      await expectLater(
-        router.generateStream('ping').toList(),
-        throwsA(
-          isA<TerminalLlmException>().having(
-            (error) => error.statusCode,
-            'statusCode',
-            402,
-          ),
-        ),
-      );
-      expect(calls, ['alpha']);
-      expect(router.lastAttemptLogs.single.statusCode, 402);
+      expect(await router.generateStream('ping').join(), 'pong');
+      expect(calls, ['alpha', 'beta']);
+      expect(router.lastAttemptLogs.first.statusCode, 402);
     });
 
     test('keeps partial text and does not call the next provider', () async {
@@ -204,7 +196,8 @@ void main() {
           'beta': _ScriptedAdapter(clients[1], (config, messages) {
             calls.add(config.name);
             return Stream<AdapterChunk>.value(
-                const AdapterText('should not run'));
+              const AdapterText('should not run'),
+            );
           }),
         },
       );
@@ -285,35 +278,37 @@ void main() {
       expect(tracker.totalCost, closeTo(0.000025, 1e-12));
     });
 
-    test('sendMessageStream sends earlier turns as separate messages',
-        () async {
-      final client = MockClient((_) async => http.Response('', 200));
-      addTearDown(client.close);
-      final seen = <List<ChatTurn>>[];
+    test(
+      'sendMessageStream sends earlier turns as separate messages',
+      () async {
+        final client = MockClient((_) async => http.Response('', 200));
+        addTearDown(client.close);
+        final seen = <List<ChatTurn>>[];
 
-      final router = RouterLlmProvider(
-        providers: [_config('beta')],
-        history: <ChatMessage>[
-          ChatMessage.user('hello', const []),
-          ChatMessage.llm()..append('hi'),
-        ],
-        customAdapters: {
-          'beta': _ScriptedAdapter(client, (config, messages) {
-            seen.add(messages);
-            return Stream<AdapterChunk>.value(const AdapterText('next'));
-          }),
-        },
-      );
-      addTearDown(router.dispose);
+        final router = RouterLlmProvider(
+          providers: [_config('beta')],
+          history: <ChatMessage>[
+            ChatMessage.user('hello', const []),
+            ChatMessage.llm()..append('hi'),
+          ],
+          customAdapters: {
+            'beta': _ScriptedAdapter(client, (config, messages) {
+              seen.add(messages);
+              return Stream<AdapterChunk>.value(const AdapterText('next'));
+            }),
+          },
+        );
+        addTearDown(router.dispose);
 
-      await router.sendMessageStream('again').drain<void>();
+        await router.sendMessageStream('again').drain<void>();
 
-      expect(seen, hasLength(1));
-      expect(
-        seen.single.map((turn) => '${turn.role.name}:${turn.text}').toList(),
-        <String>['user:hello', 'assistant:hi', 'user:again'],
-      );
-    });
+        expect(seen, hasLength(1));
+        expect(
+          seen.single.map((turn) => '${turn.role.name}:${turn.text}').toList(),
+          <String>['user:hello', 'assistant:hi', 'user:again'],
+        );
+      },
+    );
   });
 }
 
@@ -349,7 +344,8 @@ class _ScriptedAdapter extends BaseLlmAdapter {
   final Stream<AdapterChunk> Function(
     ProviderConfig config,
     List<ChatTurn> messages,
-  ) _handler;
+  )
+  _handler;
 
   @override
   Stream<AdapterChunk> streamCompletion({

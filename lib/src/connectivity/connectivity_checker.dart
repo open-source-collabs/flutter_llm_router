@@ -13,57 +13,88 @@ import 'probe_native.dart' if (dart.library.js_interop) 'probe_web.dart';
 abstract interface class ConnectivityChecker {
   /// Completes with `true` when the internet is reachable.
   ///
-  /// Implementations must not throw. Report any failure as `false`.
+  /// Implementations must not throw. Report `false` only when the device is
+  /// clearly offline, because `false` stops the whole chain.
   Future<bool> hasInternet();
+}
+
+/// [ConnectivityChecker] that always reports online, which turns the
+/// offline check off. The router then always fails over.
+class AssumeOnlineConnectivityChecker implements ConnectivityChecker {
+  /// Creates a checker that never reports offline.
+  const AssumeOnlineConnectivityChecker();
+
+  @override
+  Future<bool> hasInternet() async => true;
 }
 
 /// [ConnectivityChecker] that sends a lightweight request to [probeUrl].
 ///
-/// Any HTTP response, whatever its status, counts as online. A connection
-/// error, or no response within [timeout], counts as offline.
+/// Any HTTP response, whatever its status, counts as online. When the probe
+/// fails with a connection error and no [probeUrl] was given, a second probe
+/// goes to [fallbackProbeUrl], so a network that blocks one host does not
+/// look offline. The device is reported offline only when every probe fails
+/// with a connection error. A probe that gets no answer within [timeout] is
+/// inconclusive and counts as online, so a slow network still fails over.
 ///
 /// On native platforms the probe is a `HEAD` request. On web it is a
 /// `no-cors` `fetch`, so the browser's CORS policy does not make a reachable
 /// host look unreachable.
 class HttpConnectivityChecker implements ConnectivityChecker {
   /// Creates a checker that probes [probeUrl], defaulting to
-  /// [defaultProbeUrl].
+  /// [defaultProbeUrl] with [fallbackProbeUrl] as a second try.
   ///
-  /// Pass a different [probeUrl] where Google is blocked. When [client] is
+  /// Pass a different [probeUrl] where Google is blocked or must not be
+  /// contacted. A custom [probeUrl] has no fallback. When [client] is
   /// provided, the probe is a `HEAD` request through it on every platform,
   /// and the caller keeps ownership of the client.
   HttpConnectivityChecker({
     Uri? probeUrl,
     this.timeout = const Duration(seconds: 3),
     http.Client? client,
-  })  : probeUrl = probeUrl ?? defaultProbeUrl,
-        _client = client;
+  }) : probeUrl = probeUrl ?? defaultProbeUrl,
+       _probeUrls = probeUrl == null
+           ? <Uri>[defaultProbeUrl, fallbackProbeUrl]
+           : <Uri>[probeUrl],
+       _client = client;
 
   /// Google's empty `204 No Content` endpoint, used when no [probeUrl] is
   /// given.
-  static final Uri defaultProbeUrl =
-      Uri.parse('https://www.google.com/generate_204');
+  static final Uri defaultProbeUrl = Uri.parse(
+    'https://www.google.com/generate_204',
+  );
 
-  /// URL the probe requests.
+  /// Cloudflare's empty `204 No Content` endpoint, probed when
+  /// [defaultProbeUrl] cannot be reached.
+  static final Uri fallbackProbeUrl = Uri.parse(
+    'https://cp.cloudflare.com/generate_204',
+  );
+
+  /// URL the probe requests first.
   final Uri probeUrl;
 
-  /// How long the probe waits for a response before reporting offline.
+  /// How long each probe waits for a response before it is inconclusive.
   final Duration timeout;
 
+  final List<Uri> _probeUrls;
   final http.Client? _client;
 
   @override
   Future<bool> hasInternet() async {
-    final client = _client;
-    try {
-      final probe = client == null
-          ? probeReachable(probeUrl)
-          : client.head(probeUrl).then((_) => true);
-      return await probe.timeout(timeout);
-    } on Object {
-      // The contract is to never throw: timeouts, socket errors, and browser
-      // fetch rejections all mean the probe host could not be reached.
-      return false;
+    for (final url in _probeUrls) {
+      final client = _client;
+      try {
+        final probe = client == null
+            ? probeReachable(url)
+            : client.head(url).then((_) => true);
+        if (await probe.timeout(timeout)) return true;
+      } on TimeoutException {
+        return true;
+      } on Object {
+        // The contract is to never throw: socket errors and browser fetch
+        // rejections mean this host could not be reached. Try the next one.
+      }
     }
+    return false;
   }
 }

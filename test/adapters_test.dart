@@ -18,11 +18,10 @@ void main() {
         final body = _jsonMap(utf8.decode(await bodyStream.toBytes()));
         expect(body['model'], 'gpt-4o-mini');
         expect(body['stream'], isTrue);
-        expect(body['max_tokens'], 1024);
-        expect(
-          body['stream_options'],
-          <String, Object?>{'include_usage': true},
-        );
+        expect(body['max_completion_tokens'], 1024);
+        expect(body['stream_options'], <String, Object?>{
+          'include_usage': true,
+        });
         final messages = body['messages']! as List<dynamic>;
         final first = messages.first as Map<String, dynamic>;
         expect(first['role'], 'user');
@@ -143,30 +142,36 @@ void main() {
       );
     });
 
-    test('reads input tokens from message_start and output from message_delta',
-        () async {
-      final client = MockClient.streaming((request, bodyStream) async {
-        await bodyStream.drain<void>();
-        return http.StreamedResponse(
-          Stream<List<int>>.value(utf8.encode(_anthropicUsageSse)),
-          200,
-        );
-      });
-      addTearDown(client.close);
+    test(
+      'reads input tokens from message_start and output from message_delta',
+      () async {
+        final client = MockClient.streaming((request, bodyStream) async {
+          await bodyStream.drain<void>();
+          return http.StreamedResponse(
+            Stream<List<int>>.value(utf8.encode(_anthropicUsageSse)),
+            200,
+          );
+        });
+        addTearDown(client.close);
 
-      final chunks = await AnthropicAdapter(client: client)
-          .streamCompletion(
-            config: _config(model: 'claude-3-5-haiku-latest'),
-            messages: _userTurn('Hello'),
-          )
-          .toList();
-      final usage = chunks.whereType<AdapterUsage>().toList();
+        final chunks = await AnthropicAdapter(client: client)
+            .streamCompletion(
+              config: _config(model: 'claude-3-5-haiku-latest'),
+              messages: _userTurn('Hello'),
+            )
+            .toList();
+        final usage = chunks.whereType<AdapterUsage>().toList();
 
-      expect(
-          usage.map((event) => event.inputTokens).toList(), <int?>[25, null]);
-      expect(
-          usage.map((event) => event.outputTokens).toList(), <int?>[null, 4]);
-    });
+        expect(usage.map((event) => event.inputTokens).toList(), <int?>[
+          25,
+          null,
+        ]);
+        expect(usage.map((event) => event.outputTokens).toList(), <int?>[
+          null,
+          4,
+        ]);
+      },
+    );
   });
 
   group('GeminiAdapter', () {
@@ -233,20 +238,23 @@ void main() {
       await _expectStatus<RetryableLlmException>(503, 'unavailable');
     });
 
-    test('HTTP 401 throws TerminalLlmException', () async {
-      await _expectStatus<TerminalLlmException>(401, 'unauthorized');
+    test('HTTP 401 throws ProviderUnavailableLlmException', () async {
+      await _expectStatus<ProviderUnavailableLlmException>(401, 'unauthorized');
     });
 
     test('HTTP 400 throws TerminalLlmException', () async {
       await _expectStatus<TerminalLlmException>(400, 'invalid prompt');
     });
 
-    test('HTTP 403 throws TerminalLlmException', () async {
-      await _expectStatus<TerminalLlmException>(403, 'forbidden');
+    test('HTTP 403 throws ProviderUnavailableLlmException', () async {
+      await _expectStatus<ProviderUnavailableLlmException>(403, 'forbidden');
     });
 
-    test('HTTP 402 throws TerminalLlmException', () async {
-      await _expectStatus<TerminalLlmException>(402, 'insufficient credits');
+    test('HTTP 402 throws ProviderUnavailableLlmException', () async {
+      await _expectStatus<ProviderUnavailableLlmException>(
+        402,
+        'insufficient credits',
+      );
     });
 
     test('a timed-out request throws RetryableLlmException', () async {
@@ -304,14 +312,16 @@ void main() {
       );
     });
 
-    test('close releases an adapter-owned client and ignores an injected one',
-        () {
-      OpenAiAdapter().close();
+    test(
+      'close releases an adapter-owned client and ignores an injected one',
+      () {
+        OpenAiAdapter().close();
 
-      final client = MockClient((request) async => http.Response('', 200));
-      addTearDown(client.close);
-      OpenAiAdapter(client: client).close();
-    });
+        final client = MockClient((request) async => http.Response('', 200));
+        addTearDown(client.close);
+        OpenAiAdapter(client: client).close();
+      },
+    );
   });
 
   group('AllProvidersFailedException', () {
@@ -339,7 +349,8 @@ void main() {
   });
 }
 
-const _openAiTail = 'lo"}}]}\n\n'
+const _openAiTail =
+    'lo"}}]}\n\n'
     'data: {"choices":[{"delta":{"role":"assistant"}}]}\n\n'
     'data: {"choices":[{"delta":{"content":" world"}}]}\n\n'
     'data: [DONE]\n\n';
@@ -434,9 +445,7 @@ Future<void> _expectStatus<T extends LlmRouterException>(
   int statusCode,
   String body,
 ) {
-  final client = MockClient(
-    (request) async => http.Response(body, statusCode),
-  );
+  final client = MockClient((request) async => http.Response(body, statusCode));
   addTearDown(client.close);
 
   return expectLater(

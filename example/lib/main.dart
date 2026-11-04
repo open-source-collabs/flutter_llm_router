@@ -57,11 +57,13 @@ class _DemoPageState extends State<DemoPage> {
     _openAiAdapter = _FailableAdapter(
       delegate: OpenAiAdapter(),
       apiKey: _openAiKey,
-      simulate: () => _dropOpenAi
-          ? _SimulatedFailure.network
-          : _failOpenAi
-              ? _SimulatedFailure.rateLimit
-              : null,
+      simulate:
+          () =>
+              _dropOpenAi
+                  ? _SimulatedFailure.network
+                  : _failOpenAi
+                  ? _SimulatedFailure.rateLimit
+                  : null,
     );
     _geminiAdapter = _FailableAdapter(
       delegate: GeminiAdapter(),
@@ -99,6 +101,15 @@ class _DemoPageState extends State<DemoPage> {
         ),
       ],
       costTracker: _costTracker,
+      settings: const GenerationSettings(
+        systemPrompt: 'You are a concise, friendly assistant.',
+      ),
+      // Two failed requests in a row skip a provider for 20 seconds, so a
+      // simulated outage stops costing a round trip on every message.
+      circuitBreaker: const CircuitBreakerPolicy(
+        failureThreshold: 2,
+        cooldown: Duration(seconds: 20),
+      ),
       customAdapters: <String, BaseLlmAdapter>{
         'openai': _openAiAdapter,
         'gemini': _geminiAdapter,
@@ -140,8 +151,8 @@ class _DemoPageState extends State<DemoPage> {
             icon: const Icon(Icons.key),
           ),
           IconButton(
-            tooltip: 'Attempt logs',
-            onPressed: _showAttemptLogs,
+            tooltip: 'Router inspector',
+            onPressed: _showInspector,
             icon: const Icon(Icons.receipt_long),
           ),
         ],
@@ -175,9 +186,7 @@ class _DemoPageState extends State<DemoPage> {
                 ),
                 Row(
                   children: [
-                    const Expanded(
-                      child: Text('Also simulate Gemini outage'),
-                    ),
+                    const Expanded(child: Text('Also simulate Gemini outage')),
                     Switch(
                       value: _failGemini,
                       onChanged: (value) => setState(() => _failGemini = value),
@@ -191,12 +200,15 @@ class _DemoPageState extends State<DemoPage> {
       ),
       body: LlmChatView(
         provider: _router,
-        welcomeMessage: 'Separate Direct Providers:\n'
+        welcomeMessage:
+            'Separate Direct Providers:\n'
             '1. OpenAI (gpt-4o-mini)\n'
             '2. Google Gemini (gemini-2.0-flash)\n'
             '3. Anthropic (claude-3-5-haiku)\n\n'
-            'Tap the key icon at top right to enter your API keys. '
-            'Use the outage switches above to test live failover!',
+            'Without keys, each provider sends a simulated demo reply. '
+            'Tap the key icon at top right to enter real API keys. '
+            'Use the outage switches above to test live failover, and the '
+            'inspector icon to watch each attempt.',
         suggestions: const ['Hello', 'Count to three'],
         onErrorCallback: _showError,
       ),
@@ -230,17 +242,18 @@ class _DemoPageState extends State<DemoPage> {
     }
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.error_outline),
-        title: const Text('Something went wrong'),
-        content: Text(error.message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+      builder:
+          (context) => AlertDialog(
+            icon: const Icon(Icons.error_outline),
+            title: const Text('Something went wrong'),
+            content: Text(error.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
           ),
-        ],
-      ),
     );
   }
 
@@ -294,65 +307,21 @@ class _DemoPageState extends State<DemoPage> {
     );
   }
 
-  void _showAttemptLogs() {
-    final logs = _router.lastAttemptLogs;
+  void _showInspector() {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      isScrollControlled: true,
       builder: (context) {
         return SafeArea(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  'Attempt logs',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                if (logs.isEmpty)
-                  const Text('No attempts yet. Send a message to record one.')
-                else
-                  for (final log in logs) _AttemptTile(log: log),
-              ],
-            ),
+            padding: const EdgeInsets.only(bottom: 24),
+            child: RouterInspector(router: _router),
           ),
         );
       },
     );
   }
-}
-
-class _AttemptTile extends StatelessWidget {
-  const _AttemptTile({required this.log});
-
-  final AttemptLog log;
-
-  @override
-  Widget build(BuildContext context) {
-    final status = log.isSuccess ? 'success' : _failureStatus(log);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        log.isSuccess ? Icons.check_circle_outline : Icons.error_outline,
-      ),
-      title: Text(log.model),
-      subtitle: Text('${log.providerName} · ${log.latencyMs} ms · $status'),
-    );
-  }
-}
-
-String _failureStatus(AttemptLog log) {
-  final code = log.statusCode;
-  final error = log.error;
-  if (code != null && error != null && error.isNotEmpty) {
-    return 'HTTP $code · $error';
-  }
-  if (error != null && error.isNotEmpty) return error;
-  if (code != null) return 'HTTP $code';
-  return 'failed';
 }
 
 enum _SimulatedFailure { rateLimit, network }
@@ -367,6 +336,11 @@ class _FailableAdapter extends BaseLlmAdapter {
   final BaseLlmAdapter delegate;
   final TextEditingController apiKey;
   final _SimulatedFailure? Function() simulate;
+
+  // Forward the wrapped vendor's attachment support, so the router skips
+  // this provider for files the vendor cannot take.
+  @override
+  ProviderCapabilities get capabilities => delegate.capabilities;
 
   @override
   Stream<AdapterChunk> streamCompletion({
@@ -394,10 +368,27 @@ class _FailableAdapter extends BaseLlmAdapter {
       case null:
         break;
     }
+    final key = apiKey.text.trim();
+    if (key.isEmpty) return _demoReply(config);
     return delegate.streamCompletion(
-      config: config.copyWith(apiKey: apiKey.text.trim()),
+      config: config.copyWith(apiKey: key),
       messages: messages,
     );
+  }
+
+  /// A simulated reply for providers without a key, so the hosted demo
+  /// shows failover and cost tracking without real API calls.
+  Stream<AdapterChunk> _demoReply(ProviderConfig config) async* {
+    final words =
+        'Demo reply from ${config.name} (${config.model}). Flip an outage '
+                'switch and send again to watch the router fail over. Add an '
+                'API key to talk to the real model.'
+            .split(' ');
+    for (final word in words) {
+      await Future<void>.delayed(const Duration(milliseconds: 35));
+      yield AdapterText('$word ');
+    }
+    yield const AdapterFinish(FinishReason.stop);
   }
 
   @override

@@ -17,10 +17,10 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_ai_toolkit: ^1.0.0
-  flutter_llm_router: ^1.1.0
+  flutter_llm_router: ^1.2.0
 ```
 
-Requires Dart `^3.7.0` and Flutter `>=3.27.0`. Fully supported on Windows, macOS, Linux, Android, iOS, and Web.
+Requires Dart `^3.8.0` and Flutter `>=3.32.0`. Fully supported on Windows, macOS, Linux, Android, iOS, and Web.
 
 ## 2. Create the router
 
@@ -84,4 +84,6 @@ cd example
 flutter run -d windows  # or -d chrome, or connected device
 ```
 
-The example sends one OpenRouter key to `https://openrouter.ai/api/v1` and walks `openai/gpt-4o-mini`, then `google/gemini-2.5-flash`, then `anthropic/claude-haiku-4.5`. Enter that key from the key icon. Send a prompt with the 429 switch off, then with it on, then with both outage switches on. The spend label and the attempt sheet are the checks. Direct vendor keys, as in the snippet above, are the production setup.
+The example uses direct OpenAI, Gemini, and Anthropic keys and walks `gpt-4o-mini`, then `gemini-2.0-flash`, then `claude-3-5-haiku-20241022`. Enter the keys from the key icon. Send a prompt with the switches off, then turn on **Simulate OpenAI outage (HTTP 429)**, then also turn on **Also simulate Gemini outage**. The spend label and the attempt sheet are the checks.
+
+Keys in a client app can be extracted. For a production app using your own keys, route requests through a backend proxy by setting `baseUrl`. See [Protecting API Keys](../README.md#protecting-api-keys).
