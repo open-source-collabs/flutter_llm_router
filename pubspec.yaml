@@ -1,6 +1,6 @@
 name: flutter_llm_router
 description: "Production reliability layer for LLMs in Flutter AI Toolkit: multi-provider failover, retries, circuit breaking, budgets, attachments, cost tracking, and live observability."
-version: 1.2.0
+version: 1.2.1
 repository: https://github.com/open-source-collabs/flutter_llm_router
 issue_tracker: https://github.com/open-source-collabs/flutter_llm_router/issues
 

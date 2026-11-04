@@ -5,7 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - Unreleased
+## [1.2.1] - Unreleased
+
+### Fixed
+
+- The package is now WASM-compatible, which restores the full platform score on pub.dev. It imports only the `flutter_ai_toolkit` provider interfaces instead of the toolkit's public library. That library also exports `FirebaseProvider`, which reaches `dart:io` through `firebase_ai` and `web_socket_channel`. The public API is unchanged.
+
+## [1.2.0] - 2026-11-04
 
 1.2.0 is the first release since 1.1.0. It combines four milestones: failover that covers every failure class, real chat features, opt-in reliability policies, and tool calling with structured output. Every new feature is opt-in, but some failures now fail over where they used to stop the chain.
 
