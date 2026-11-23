@@ -5,7 +5,16 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.1] - Unreleased
+## [1.2.1] - 2026-11-24
+
+### Added
+
+- Added live cost tracking and `RouterInspector` debug widget.
+- Added demo example application in `example/`.
+
+### Changed
+
+- Updated Material UI imports and dependencies to `package:material_ui/material_ui.dart` for Flutter 3.50+ compatibility.
 
 ### Fixed
 
