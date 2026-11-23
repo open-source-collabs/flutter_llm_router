@@ -61,6 +61,7 @@ class CostTracker {
   int _totalInputTokens = 0;
   int _totalCachedInputTokens = 0;
   int _totalOutputTokens = 0;
+  bool _isDisposed = false;
 
   /// Listenable USD total. Listeners run when the total changes.
   ValueListenable<double> get totalCostNotifier => _totalCostNotifier;
@@ -160,10 +161,27 @@ class CostTracker {
   /// The tracker must not be used after this call. In debug and profile
   /// builds, later reads and writes throw [FlutterError].
   void dispose() {
+    _isDisposed = true;
     _totalCostNotifier.dispose();
   }
 
   void _assertAlive() {
-    assert(ChangeNotifier.debugAssertNotDisposed(_totalCostNotifier));
+    assert(() {
+      if (_isDisposed) {
+        throw FlutterError(
+          'A CostTracker was used after being disposed.\n'
+          'Once you have called dispose() on a CostTracker, it can no longer be used.',
+        );
+      }
+      try {
+        ChangeNotifier.debugAssertNotDisposed(_totalCostNotifier);
+      } catch (_) {
+        throw FlutterError(
+          'A CostTracker was used after being disposed.\n'
+          'Once you have called dispose() on a CostTracker, it can no longer be used.',
+        );
+      }
+      return true;
+    }());
   }
 }
